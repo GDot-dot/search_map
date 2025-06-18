@@ -3,10 +3,17 @@
 <head>
     <title>附近優質店家探測器</title>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
     <style>
         /* CSS 樣式部分保持不變 */
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; }
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* 防止整個頁面滾動 */
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; display: flex; flex-direction: column; }
         #top-bar { background-color: #4285F4; color: white; padding: 15px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.2); z-index: 10; }
         h1 { margin: 0; font-size: 1.5em; }
         #main-content { display: flex; flex: 1; overflow: hidden; }
@@ -20,18 +27,46 @@
         #draw-button { background-color: #FBBC05; margin-top: 10px; }
         #draw-button:hover { background-color: #e2a800; }
         #map-container { flex: 1; display: flex; flex-direction: column; }
-        #map { height: 60%; background-color: #e0e0e0; }
-        #results { height: 40%; overflow-y: auto; padding: 10px; box-sizing: border-box; }
+        #map { flex: 3; /* 地圖佔 3/5 */ background-color: #e0e0e0; }
+        #results { flex: 2; /* 結果列表佔 2/5 */ overflow-y: auto; padding: 10px; box-sizing: border-box; border-top: 1px solid #ddd; }
         .place-item { padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; }
         .place-item:hover { background-color: #f0f0f0; }
         .place-item h4 { margin: 0 0 5px 0; }
         .place-item p { margin: 0; font-size: 0.9em; color: #555; }
         #recommendation { margin-top: 20px; padding: 15px; background-color: #e8f0fe; border: 1px solid #d2e3fc; border-radius: 8px; text-align: center; }
         #recommendation h3 { margin-top: 0; color: #1967d2; }
+
+        /* 【第二步修正】加入了這段 Media Query */
+        @media (max-width: 768px) {
+            html, body {
+                overflow: auto; /* 在手機上允許整個頁面滾動 */
+                height: auto;
+            }
+            #main-content {
+                flex-direction: column;
+                height: auto;
+                overflow: visible;
+            }
+            #controls {
+                width: 100%;
+                height: auto;
+                border-right: none;
+                border-bottom: 2px solid #ddd;
+                overflow-y: visible;
+            }
+            #map-container {
+                /* 在手機上，地圖和結果列表需要有明確的高度 */
+                height: calc(100vh - 58px); /* 佔滿螢幕剩餘高度 (減去頂部 bar 的高度) */
+                flex: none; /* 取消 flex 比例 */
+            }
+            #map { flex: 3; } /* 維持地圖和結果的比例 */
+            #results { flex: 2; }
+            h1 { font-size: 1.2em; }
+        }
     </style>
 </head>
 <body>
-    <!-- HTML 部分保持不變 -->
+    <!-- HTML 部分完全不變 -->
     <div id="top-bar"><h1>附近優質店家探測器</h1></div>
     <div id="main-content">
         <div id="controls">
@@ -73,6 +108,7 @@
         </div>
     </div>
 
+    <!-- JavaScript 部分完全不變 -->
     <script>
         let map, userLocation;
         let currentResults = [];
@@ -80,7 +116,6 @@
         const mapId = "DEMO_MAP_ID";
 
         async function init() {
-            // 此函式保持不變
             const defaultCenter = { lat: 25.0479, lng: 121.5171 };
             const { Map } = await google.maps.importLibrary("maps");
             const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
@@ -102,13 +137,11 @@
 
         async function searchNearbyPlaces() {
             if (!userLocation) { alert("正在等待定位，請稍後再試..."); return; }
-            
             clearResults();
             const { Place } = await google.maps.importLibrary("places");
             const radius = parseInt(document.getElementById('radius-slider').value);
             const type = document.getElementById('type-select').value;
             const price = document.getElementById('price-select').value;
-
             const request = {
                 textQuery: type,
                 locationBias: { center: userLocation, radius: radius },
@@ -116,59 +149,30 @@
                 maxResultCount: 20,
                 fields: ['displayName', 'location', 'rating', 'priceLevel', 'formattedAddress', 'types'],
             };
-            
             document.getElementById('results').innerHTML = '<p>正在搜尋中...</p>';
-            
             try {
                 const { places } = await Place.searchByText(request);
-                
-                // ==================【偵錯模式：印出原始資料】==================
-                console.clear(); // 清空舊的 console 資訊
+                console.clear();
                 console.log(`===== Google API 原始回傳（過濾前有 ${places.length} 筆資料）=====`);
-                console.table(places.map(p => ({
-                    name: p.displayName,
-                    rating: p.rating,
-                    priceLevel: p.priceLevel, // 這是我們要觀察的重點！
-                    types: p.types.join(', ')
-                })));
+                console.table(places.map(p => ({ name: p.displayName, rating: p.rating, priceLevel: p.priceLevel, types: p.types.join(', ') })));
                 console.log("=====================================================");
-                // =========================================================
-
-                // ==================【修正版：更寬鬆的過濾邏輯】==================
                 const filteredResults = places.filter(place => {
-                    // 如果使用者選「任何價位」，所有店家都通過
-                    if (price === 'any') return true; 
-
-                    // 如果店家沒有價位資訊 (priceLevel is null)，也讓他通過
-                    // 這樣才不會錯過那些 Google 沒有標價的店家
+                    if (price === 'any') return true;
                     if (!place.priceLevel) return true;
-
-                    // 對照表
-                    const priceEnumMap = {
-                        '1': 'PRICE_LEVEL_INEXPENSIVE', '2': 'PRICE_LEVEL_MODERATE',
-                        '3': 'PRICE_LEVEL_EXPENSIVE', '4': 'PRICE_LEVEL_VERY_EXPENSIVE',
-                    };
-
-                    // 如果店家有價位資訊，就檢查是否符合使用者選擇
+                    const priceEnumMap = { '1': 'PRICE_LEVEL_INEXPENSIVE', '2': 'PRICE_LEVEL_MODERATE', '3': 'PRICE_LEVEL_EXPENSIVE', '4': 'PRICE_LEVEL_VERY_EXPENSIVE' };
                     return place.priceLevel === priceEnumMap[price];
                 });
-                // ===========================================================
-
                 if (filteredResults.length === 0) {
                     document.getElementById('results').innerHTML = '<p>找不到符合條件的優質店家。</p>';
                     return;
                 }
-                
                 currentResults = filteredResults;
                 displayResults(filteredResults);
-
             } catch (error) {
                 console.error("Search failed:", error);
                 document.getElementById('results').innerHTML = '<p>搜尋失敗或發生錯誤。</p>';
             }
         }
-        
-        // displayResults, drawWinner, clearResults 函式保持不變
         function displayResults(places) {
             const resultsDiv = document.getElementById('results');
             resultsDiv.innerHTML = '';
@@ -210,10 +214,8 @@
             document.getElementById('results').innerHTML = '';
             document.getElementById('recommendation').style.display = 'none';
         }
-
         window.initMap = init;
-    </script>
-	
+
     <script 
         src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDvKC9RDnx1uUCYrOcm9Mb0IRg00J0PA1c&libraries=maps,marker,places&v=beta&callback=initMap"
         async
