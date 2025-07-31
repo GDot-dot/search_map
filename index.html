@@ -1,281 +1,1212 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
-    <title>附近優質店家探測器V2.0</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>附近優質店家探測器 V3.0</title>
     <style>
-        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; display: flex; flex-direction: column; }
-        #top-bar { background-color: #4285F4; color: white; padding: 15px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.2); z-index: 10; }
-        h1 { margin: 0; font-size: 1.5em; }
-        #main-content { display: flex; flex: 1; overflow: hidden; }
-        #controls { width: 320px; padding: 20px; background: #f8f9fa; overflow-y: auto; border-right: 1px solid #ddd; box-sizing: border-box; }
-        #controls h2 { margin-top: 0; }
-        .control-group { margin-bottom: 20px; }
-        .control-group label { display: block; margin-bottom: 5px; font-weight: bold; }
-        select, input { width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
-        button { width: 100%; padding: 12px; background-color: #34A853; color: white; border: none; border-radius: 4px; font-size: 1em; cursor: pointer; transition: background-color 0.2s; }
-        button:hover { background-color: #2c8e44; }
-        #draw-button { background-color: #FBBC05; margin-top: 10px; }
-        #draw-button:hover { background-color: #e2a800; }
-        .checkbox-label { display: flex; align-items: center; cursor: pointer; font-weight: normal; }
-        .checkbox-label input { width: auto; margin-right: 8px; }
-        #map-container { flex: 1; display: flex; flex-direction: column; }
-        #map { flex: 3; background-color: #e0e0e0; }
-        #results { flex: 2; overflow-y: auto; padding: 10px; box-sizing: border-box; border-top: 1px solid #ddd; }
-        .place-item { padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; overflow: hidden; }
-        .place-item:hover { background-color: #f0f0f0; }
-        .place-item h4 { margin: 0 0 5px 0; }
-        .place-item p { margin: 0; font-size: 0.9em; color: #555; }
-        .share-buttons-container {
-            display: flex;
-            gap: 8px;
-            margin-top: 8px;
-            float: right;
+        :root {
+            --primary-color: #4285F4;
+            --secondary-color: #34A853;
+            --accent-color: #FBBC05;
+            --danger-color: #EA4335;
+            --text-color: #333;
+            --text-secondary: #555;
+            --bg-color: #f8f9fa;
+            --border-color: #ddd;
+            --shadow: 0 2px 4px rgba(0,0,0,0.1);
+            --border-radius: 8px;
+            --spacing: 16px;
         }
-        .share-btn {
-            background: none;
-            border: 1px solid #ccc;
-            color: #555;
-            padding: 4px 8px;
-            font-size: 0.8em;
-            border-radius: 4px;
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: var(--text-color);
+            overflow: hidden;
+        }
+
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--primary-color) 0%, #3367d6 100%);
+            color: white;
+            padding: var(--spacing);
+            text-align: center;
+            box-shadow: var(--shadow);
+            z-index: 1000;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 320px;
+            background: var(--bg-color);
+            border-right: 1px solid var(--border-color);
+            overflow-y: auto;
+        }
+
+        .controls {
+            padding: var(--spacing);
+        }
+
+        .control-section {
+            margin-bottom: 24px;
+        }
+
+        .control-section h2 {
+            margin: 0 0 var(--spacing) 0;
+            font-size: 1.1rem;
+            color: var(--text-color);
+        }
+
+        .control-group {
+            margin-bottom: var(--spacing);
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            font-size: 0.9rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.1);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+            font-weight: 500;
             cursor: pointer;
+            transition: all 0.2s;
             text-decoration: none;
             display: inline-block;
+            text-align: center;
         }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--secondary-color) 0%, #2c8e44 100%);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(52, 168, 83, 0.3);
+        }
+
+        .btn-accent {
+            background: linear-gradient(135deg, var(--accent-color) 0%, #e2a800 100%);
+            color: white;
+            margin-top: 10px;
+        }
+
+        .btn-accent:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(251, 188, 5, 0.3);
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+            margin: 0;
+        }
+
+        .checkbox-group label {
+            margin: 0;
+            cursor: pointer;
+            font-weight: normal;
+        }
+
+        .map-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .map-container {
+            flex: 3;
+            background: #e0e0e0;
+            position: relative;
+        }
+
+        .results-container {
+            flex: 2;
+            border-top: 1px solid var(--border-color);
+            overflow-y: auto;
+            background: white;
+        }
+
+        .results-header {
+            padding: var(--spacing);
+            background: var(--bg-color);
+            border-bottom: 1px solid #eee;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .results-count {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .results-content {
+            padding: 0;
+        }
+
+        .place-item {
+            padding: var(--spacing);
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            position: relative;
+        }
+
+        .place-item:hover {
+            background-color: #f5f5f5;
+        }
+
+        .place-item:last-child {
+            border-bottom: none;
+        }
+
+        .place-info h4 {
+            margin: 0 0 6px 0;
+            font-size: 1rem;
+            color: var(--text-color);
+        }
+
+        .place-meta {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 6px;
+            font-size: 0.85rem;
+        }
+
+        .rating {
+            color: #ff9800;
+            font-weight: 500;
+        }
+
+        .price-level {
+            color: var(--secondary-color);
+            font-weight: 500;
+        }
+
+        .opening-status {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .opening-status.open {
+            background: #e8f5e8;
+            color: var(--secondary-color);
+        }
+
+        .opening-status.closed {
+            background: #ffeaea;
+            color: var(--danger-color);
+        }
+
+        .place-address {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            margin: 0;
+        }
+
+        .share-buttons {
+            position: absolute;
+            top: var(--spacing);
+            right: var(--spacing);
+            display: flex;
+            gap: 6px;
+        }
+
+        .share-btn {
+            padding: 6px 10px;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+
         .share-btn:hover {
-            background-color: #f0f0f0;
-            border-color: #aaa;
+            background: var(--bg-color);
+            border-color: var(--primary-color);
+            color: var(--primary-color);
         }
-        #recommendation { margin-top: 20px; padding: 15px; background-color: #e8f0fe; border: 1px solid #d2e3fc; border-radius: 8px; text-align: center; }
-        #recommendation h3 { margin-top: 0; color: #1967d2; }
+
+        .recommendation-card {
+            margin-top: 20px;
+            padding: 20px;
+            background: linear-gradient(135deg, #e8f0fe 0%, #f3f7ff 100%);
+            border: 1px solid #d2e3fc;
+            border-radius: var(--border-radius);
+            text-align: center;
+            display: none;
+        }
+
+        .recommendation-card h3 {
+            margin: 0 0 10px 0;
+            color: #1967d2;
+            font-size: 1.1rem;
+        }
+
+        .winner-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #ffeaea;
+            color: var(--danger-color);
+            padding: 12px;
+            border-radius: var(--border-radius);
+            margin: 10px 0;
+            border: 1px solid #ffcdd2;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state-icon {
+            font-size: 3rem;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
         @media (max-width: 768px) {
-            html, body { overflow: auto; height: auto; }
-            #main-content { flex-direction: column; height: auto; overflow: visible; }
-            #controls { width: 100%; height: auto; border-right: none; border-bottom: 2px solid #ddd; overflow-y: visible; }
-            #map-container { height: calc(100vh - 58px); flex: none; }
-            h1 { font-size: 1.2em; }
+            html, body {
+                overflow: auto;
+                height: auto;
+            }
+
+            .app-container {
+                height: auto;
+            }
+
+            .main-content {
+                flex-direction: column;
+                overflow: visible;
+            }
+
+            .sidebar {
+                width: 100%;
+                border-right: none;
+                border-bottom: 2px solid var(--border-color);
+                overflow-y: visible;
+            }
+
+            .map-section {
+                min-height: 70vh;
+            }
+
+            .header h1 {
+                font-size: 1.2rem;
+            }
+
+            .share-buttons {
+                position: static;
+                margin-top: 8px;
+                justify-content: flex-end;
+            }
         }
     </style>
 </head>
 <body>
-    <div id="top-bar"><h1>附近優質店家探測器</h1></div>
-    <div id="main-content">
-        <div id="controls">
-            <h2>篩選條件</h2>
-            <div class="control-group">
-                <label for="type-select">店家類型</label>
-                <select id="type-select">
-                    <option value="restaurant">餐廳美食</option>
-                    <option value="cafe">咖啡廳</option>
-                    <option value="clothing_store">服飾店</option>
-                    <option value="art_gallery">藝術展覽</option>
-                    <option value="book_store">書店</option>
-                    <option value="store">特色小物</option>
-                </select>
-            </div>
-            <div class="control-group">
-                <label for="keyword-input">關鍵字 (選填)</label>
-                <input type="text" id="keyword-input" placeholder="例如: 拉麵、不限時...">
-            </div>
-            <div class="control-group">
-                <label for="radius-slider">距離範圍: <span id="radius-value">1</span> km</label>
-                <input type="range" id="radius-slider" min="500" max="5000" step="500" value="1000">
-            </div>
-            <div class="control-group">
-                <label for="price-select">價位 (餐廳適用)</label>
-                <select id="price-select">
-                    <option value="any">任何價位</option>
-                    <option value="PRICE_LEVEL_INEXPENSIVE">1 ($)</option>
-                    <option value="PRICE_LEVEL_MODERATE">2 ($$)</option>
-                    <option value="PRICE_LEVEL_EXPENSIVE">3 ($$$)</option>
-                    <option value="PRICE_LEVEL_VERY_EXPENSIVE">4 ($$$$)</option>
-                </select>
-            </div>
-             <div class="control-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="open-now-checkbox">
-                    只顯示現在營業中
-                </label>
-            </div>
-            <button id="search-button">開始搜尋</button>
-            <button id="draw-button">天選之店！(抽一個)</button>
-            <div id="recommendation" style="display: none;">
-                <h3>天選之店是...</h3><p id="winner-name"></p>
-            </div>
-        </div>
-        <div id="map-container">
-            <div id="map"></div>
-            <div id="results"><p>請允許定位，然後點擊「開始搜尋」。</p></div>
-        </div>
+    <div class="app-container">
+        <header class="header">
+            <h1>附近優質店家探測器 V3.0</h1>
+        </header>
+        
+        <main class="main-content">
+            <aside class="sidebar">
+                <div class="controls">
+                    <section class="control-section">
+                        <h2>篩選條件</h2>
+                        
+                        <div class="control-group">
+                            <label for="type-select">店家類型</label>
+                            <select id="type-select" class="form-control">
+                                <option value="restaurant">餐廳美食</option>
+                                <option value="cafe">咖啡廳</option>
+                                <option value="clothing_store">服飾店</option>
+                                <option value="art_gallery">藝術展覽</option>
+                                <option value="book_store">書店</option>
+                                <option value="store">特色小物</option>
+                            </select>
+                        </div>
+
+                        <div class="control-group">
+                            <label for="keyword-input">關鍵字 (選填)</label>
+                            <input type="text" id="keyword-input" class="form-control" placeholder="例如: 拉麵、不限時...">
+                        </div>
+
+                        <div class="control-group">
+                            <label for="radius-slider">距離範圍: <span id="radius-value">1</span> km</label>
+                            <input type="range" id="radius-slider" class="form-control" min="500" max="5000" step="500" value="1000">
+                        </div>
+
+                        <div class="control-group">
+                            <label for="price-select">價位 (餐廳適用)</label>
+                            <select id="price-select" class="form-control">
+                                <option value="any">任何價位</option>
+                                <option value="1">1 ($)</option>
+                                <option value="2">2 ($$)</option>
+                                <option value="3">3 ($$$)</option>
+                                <option value="4">4 ($$$$)</option>
+                            </select>
+                        </div>
+
+                        <div class="control-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="open-now-checkbox">
+                                <label for="open-now-checkbox">只顯示現在營業中</label>
+                            </div>
+                        </div>
+
+                        <button id="search-button" class="btn btn-primary">
+                            <span class="btn-text">開始搜尋</span>
+                        </button>
+                        
+                        <button id="draw-button" class="btn btn-accent">
+                            🎲 天選之店！(抽一個)
+                        </button>
+
+                        <div id="recommendation" class="recommendation-card">
+                            <h3>🎉 天選之店是...</h3>
+                            <div id="winner-name" class="winner-name"></div>
+                        </div>
+                    </section>
+                </div>
+            </aside>
+
+            <section class="map-section">
+                <div id="map" class="map-container"></div>
+                <div class="results-container">
+                    <div class="results-header">
+                        <span>搜尋結果</span>
+                        <span id="results-count" class="results-count"></span>
+                    </div>
+                    <div id="results" class="results-content">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📍</div>
+                            <p>請允許定位，然後點擊「開始搜尋」開始探索附近的優質店家。</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
     </div>
 
     <script>
-        let map, userLocation;
-        let currentResults = [];
-        let markers = [];
-        const mapId = "DEMO_MAP_ID";
+        // 應用程式狀態管理
+        class AppState {
+            constructor() {
+                this.map = null;
+                this.userLocation = null;
+                this.currentResults = [];
+                this.markers = [];
+                this.isSearching = false;
+                this.mapLibraries = null;
+            }
 
-        async function init() {
-            try {
-                const defaultCenter = { lat: 25.0479, lng: 121.5171 };
-                const { Map } = await google.maps.importLibrary("maps");
-                const { AdvancedMarkerElement, PinElement } = await google.maps.importLibrary("marker");
-                map = new Map(document.getElementById("map"), { center: defaultCenter, zoom: 15, mapId: mapId, mapTypeControl: false, streetViewControl: false });
-                if (navigator.geolocation) {
+            reset() {
+                this.currentResults = [];
+                this.clearMarkers();
+                this.hideRecommendation();
+            }
+
+            clearMarkers() {
+                this.markers.forEach(marker => {
+                    if (marker && marker.map) {
+                        marker.map = null;
+                    }
+                });
+                this.markers = [];
+            }
+
+            hideRecommendation() {
+                const recommendationElement = document.getElementById('recommendation');
+                if (recommendationElement) {
+                    recommendationElement.style.display = 'none';
+                }
+            }
+        }
+
+        // 工具函數
+        class Utils {
+            static debounce(func, wait) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, wait);
+                };
+            }
+
+            static formatPrice(priceLevel) {
+                if (priceLevel == null) return '';
+                return '$'.repeat(priceLevel);
+            }
+
+            static formatRating(rating) {
+                return rating ? `${rating} ★` : '無評分';
+            }
+
+            static createShareText(place) {
+                const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.displayName)}&query_place_id=${place.id}`;
+                return `嘿！我用「附近優質店家探測器」找到一家很棒的店：\n\n【${place.displayName}】\n\n推薦給你！\n點擊查看地圖：${googleMapsUrl}`;
+            }
+
+            static async copyToClipboard(text) {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    return true;
+                } catch (err) {
+                    console.error('複製失敗:', err);
+                    return false;
+                }
+            }
+
+            static showError(message, container = 'results') {
+                const element = document.getElementById(container);
+                if (element) {
+                    element.innerHTML = `<div class="error-message">${message}</div>`;
+                }
+            }
+
+            static showLoading(container = 'results') {
+                const element = document.getElementById(container);
+                if (element) {
+                    element.innerHTML = '<div style="text-align: center; padding: 20px;"><div class="loading-spinner"></div>正在搜尋中...</div>';
+                }
+            }
+        }
+
+        // 地圖管理類
+        class MapManager {
+            constructor(appState) {
+                this.appState = appState;
+                this.defaultCenter = { lat: 25.0479, lng: 121.5171 };
+            }
+
+            async initialize() {
+                try {
+                    const { Map } = await google.maps.importLibrary("maps");
+                    const { AdvancedMarkerElement, PinElement } = await google.maps.importLibrary("marker");
+                    
+                    this.appState.mapLibraries = { AdvancedMarkerElement, PinElement };
+                    
+                    this.appState.map = new Map(document.getElementById("map"), {
+                        center: this.defaultCenter,
+                        zoom: 15,
+                        mapId: "DEMO_MAP_ID",
+                        mapTypeControl: false,
+                        streetViewControl: false,
+                        fullscreenControl: true,
+                        zoomControl: true
+                    });
+
+                    await this.getUserLocation();
+                    this.addUserMarker();
+                    
+                    return true;
+                } catch (error) {
+                    console.error('地圖初始化失敗:', error);
+                    Utils.showError('地圖載入失敗，請檢查網路連線或重新整理頁面。');
+                    return false;
+                }
+            }
+
+            async getUserLocation() {
+                return new Promise((resolve) => {
+                    if (!navigator.geolocation) {
+                        this.appState.userLocation = this.defaultCenter;
+                        alert('您的瀏覽器不支援地理位置功能，將使用預設地點。');
+                        resolve();
+                        return;
+                    }
+
                     navigator.geolocation.getCurrentPosition(
                         (position) => {
-                            userLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
-                            map.setCenter(userLocation);
-                            const userMarkerPin = new PinElement({ background: '#4285F4', borderColor: '#FFFFFF', glyphColor: '#FFFFFF' });
-                            new AdvancedMarkerElement({ map: map, position: userLocation, title: "你的位置", content: userMarkerPin.element });
+                            this.appState.userLocation = {
+                                lat: position.coords.latitude,
+                                lng: position.coords.longitude
+                            };
+                            this.appState.map.setCenter(this.appState.userLocation);
+                            resolve();
                         },
-                        () => { userLocation = defaultCenter; alert("無法取得您的位置，將使用預設地點進行搜尋。"); }
+                        (error) => {
+                            console.error('定位錯誤:', error);
+                            this.appState.userLocation = this.defaultCenter;
+                            this.appState.map.setCenter(this.defaultCenter);
+                            
+                            let message = '無法取得您的位置，將使用預設地點進行搜尋。';
+                            if (error.code === error.PERMISSION_DENIED) {
+                                message = '您拒絕了定位權限，將使用預設地點進行搜尋。';
+                            }
+                            alert(message);
+                            resolve();
+                        },
+                        {
+                            timeout: 10000,
+                            enableHighAccuracy: true,
+                            maximumAge: 300000
+                        }
                     );
-                } else { userLocation = defaultCenter; alert("您的瀏覽器不支援地理位置功能。"); }
-                document.getElementById('search-button').addEventListener('click', searchNearbyPlaces);
-                document.getElementById('draw-button').addEventListener('click', drawWinner);
-                document.getElementById('radius-slider').addEventListener('input', (e) => { document.getElementById('radius-value').textContent = e.target.value / 1000; });
-            } catch (error) {
-                console.error('初始化錯誤:', error);
-                alert('地圖載入失敗，請重新整理頁面。');
+                });
+            }
+
+            addUserMarker() {
+                if (!this.appState.userLocation || !this.appState.mapLibraries) return;
+                
+                const { AdvancedMarkerElement, PinElement } = this.appState.mapLibraries;
+                const userMarkerPin = new PinElement({
+                    background: '#4285F4',
+                    borderColor: '#FFFFFF',
+                    glyphColor: '#FFFFFF'
+                });
+                
+                new AdvancedMarkerElement({
+                    map: this.appState.map,
+                    position: this.appState.userLocation,
+                    title: "您的位置",
+                    content: userMarkerPin.element
+                });
+            }
+
+            addPlaceMarkers(places) {
+                if (!this.appState.mapLibraries) return;
+                
+                const { AdvancedMarkerElement, PinElement } = this.appState.mapLibraries;
+                
+                places.forEach(place => {
+                    const placeMarkerPin = new PinElement({
+                        background: '#EA4335',
+                        borderColor: '#FFFFFF',
+                        glyphColor: '#FFFFFF'
+                    });
+                    
+                    const marker = new AdvancedMarkerElement({
+                        map: this.appState.map,
+                        position: place.location,
+                        title: place.displayName,
+                        content: placeMarkerPin.element
+                    });
+                    
+                    this.appState.markers.push(marker);
+                });
+            }
+
+            focusOnPlace(place) {
+                if (this.appState.map && place.location) {
+                    this.appState.map.panTo(place.location);
+                    this.appState.map.setZoom(17);
+                }
             }
         }
-        
-        async function searchNearbyPlaces() {
-            if (!userLocation) { alert("正在等待定位..."); return; }
-            clearResults();
-            document.getElementById('results').innerHTML = '<p>正在搜尋中...</p>';
-            try {
-                const radius = parseInt(document.getElementById('radius-slider').value);
-                const type = document.getElementById('type-select').value;
-                const price = document.getElementById('price-select').value;
-                const keyword = document.getElementById('keyword-input').value.trim();
-                const isOpenNow = document.getElementById('open-now-checkbox').checked;
-                const { Place } = await google.maps.importLibrary("places");
-                let initialPlaces;
 
-                // 根據有無關鍵字，決定呼叫哪個API
-                if (keyword) {
-                    // 情況1：有關鍵字，使用 searchByText，它直接支援 isOpenNow
-                    const request = { textQuery: keyword, fields: ['displayName', 'location', 'rating', 'priceLevel', 'formattedAddress', 'id', 'regularOpeningHours'], locationBias: { center: userLocation, radius: radius }, includedType: type, isOpenNow: isOpenNow, maxResultCount: 20 };
-                    const response = await Place.searchByText(request);
-                    initialPlaces = response.places;
-                } else {
-                    // 情況2：無關鍵字，使用 searchNearby，它不支援 isOpenNow
-                    // 因此我們先取得所有店家，稍後再手動篩選
-                    const request = { fields: ['displayName', 'location', 'rating', 'priceLevel', 'formattedAddress', 'id', 'regularOpeningHours'], locationRestriction: { center: userLocation, radius: radius }, includedTypes: [type], maxResultCount: 20 };
-                    const response = await Place.searchNearby(request);
-                    initialPlaces = response.places;
+        // 搜尋管理類
+        class SearchManager {
+            constructor(appState) {
+                this.appState = appState;
+            }
+
+            async searchNearbyPlaces() {
+                if (!this.appState.userLocation) {
+                    alert("正在等待定位，請稍後再試...");
+                    return;
                 }
 
-                if (!initialPlaces || initialPlaces.length === 0) { document.getElementById('results').innerHTML = '<p>找不到符合條件的店家。</p>'; return; }
+                if (this.appState.isSearching) {
+                    return;
+                }
+
+                this.appState.isSearching = true;
+                this.updateSearchButton(true);
+                this.appState.reset();
+                Utils.showLoading();
+
+                try {
+                    const searchParams = this.getSearchParameters();
+                    const { Place } = await google.maps.importLibrary("places");
+                    
+                    let initialPlaces = await this.performSearch(Place, searchParams);
+                    
+                    if (!initialPlaces || initialPlaces.length === 0) {
+                        Utils.showError('找不到符合條件的店家，請嘗試調整搜尋條件。');
+                        return;
+                    }
+
+                    const filteredResults = this.filterResults(initialPlaces, searchParams);
+                    
+                    if (filteredResults.length === 0) {
+                        Utils.showError('找不到符合條件的優質店家，請嘗試放寬篩選條件。');
+                        return;
+                    }
+
+                    this.appState.currentResults = filteredResults;
+                    this.displayResults(filteredResults);
+
+                } catch (error) {
+                    console.error('搜尋錯誤:', error);
+                    Utils.showError('搜尋過程發生錯誤，請稍後再試。');
+                } finally {
+                    this.appState.isSearching = false;
+                    this.updateSearchButton(false);
+                }
+            }
+
+            getSearchParameters() {
+                return {
+                    radius: parseInt(document.getElementById('radius-slider').value),
+                    type: document.getElementById('type-select').value,
+                    price: document.getElementById('price-select').value,
+                    keyword: document.getElementById('keyword-input').value.trim(),
+                    isOpenNow: document.getElementById('open-now-checkbox').checked
+                };
+            }
+
+            async performSearch(Place, params) {
+                // 修正：移除不支援的 currentOpeningHours 字段
+                const baseFields = [
+                    'displayName', 
+                    'location', 
+                    'rating', 
+                    'priceLevel', 
+                    'formattedAddress', 
+                    'id', 
+                    'regularOpeningHours',
+                    'businessStatus'
+                ];
                 
-                // === 進行前端篩選 ===
-                let filteredResults = initialPlaces;
-
-                // 關鍵步驟：如果沒有關鍵字但勾選了「營業中」，就在這裡手動過濾
-                if (!keyword && isOpenNow) {
-                    filteredResults = initialPlaces.filter(place => 
-                        place.regularOpeningHours && place.regularOpeningHours.openNow === true
-                    );
+                if (params.keyword) {
+                    const request = {
+                        textQuery: params.keyword,
+                        fields: baseFields,
+                        locationBias: {
+                            center: this.appState.userLocation,
+                            radius: params.radius
+                        },
+                        includedType: params.type,
+                        // 修正：只有在勾選「只顯示營業中」時才設定 isOpenNow
+                        ...(params.isOpenNow && { isOpenNow: true }),
+                        maxResultCount: 20
+                    };
+                    const response = await Place.searchByText(request);
+                    return response.places;
+                } else {
+                    const request = {
+                        fields: baseFields,
+                        locationRestriction: {
+                            center: this.appState.userLocation,
+                            radius: params.radius
+                        },
+                        includedTypes: [params.type],
+                        // 修正：只有在勾選「只顯示營業中」時才設定 isOpenNow
+                        ...(params.isOpenNow && { isOpenNow: true }),
+                        maxResultCount: 20
+                    };
+                    const response = await Place.searchNearby(request);
+                    return response.places;
                 }
+            }
 
-                // 接著，對已經過「營業時間」篩選的結果，再進行「評分」和「價位」的篩選
-                filteredResults = filteredResults.filter(place => {
-                    if (!place.rating || place.rating < 4.0) return false;
-                    if (price !== 'any' && (!place.priceLevel || place.priceLevel !== price)) return false;
+            filterResults(places, params) {
+                return places.filter(place => {
+                    // 評分篩選 - 只保留4.0星以上或無評分的店家
+                    if (place.rating && place.rating < 4.0) {
+                        return false;
+                    }
+
+                    // 價位篩選
+                    if (params.price !== 'any') {
+                        const maxPrice = parseInt(params.price, 10);
+                        if (place.priceLevel != null && place.priceLevel > maxPrice) {
+                            return false;
+                        }
+                    }
+
+                    // 修正：移除前端的營業狀態篩選，因為 API 已經處理了
+                    // 如果用戶勾選了「只顯示營業中」，API 請求中已經包含 isOpenNow: true
+
                     return true;
                 });
-
-                if (filteredResults.length === 0) { document.getElementById('results').innerHTML = '<p>找不到符合條件的優質店家。請嘗試調整篩選條件。</p>'; return; }
-                
-                currentResults = filteredResults;
-                displayResults(filteredResults);
-
-            } catch (error) {
-                console.error('搜尋錯誤:', error);
-                document.getElementById('results').innerHTML = `<p>搜尋過程發生錯誤，請稍後再試。</p>`;
             }
-        }
-        
-        async function displayResults(places) {
-            const resultsDiv = document.getElementById('results');
-            resultsDiv.innerHTML = '';
-            const { AdvancedMarkerElement, PinElement } = await google.maps.importLibrary("marker");
-            places.forEach(place => {
-                const placeItemContainer = document.createElement('div');
-                placeItemContainer.className = 'place-item';
-                const rating = place.rating ? `${place.rating} ★` : '無評分';
-                let priceSymbol = '';
-                if (place.priceLevel) {
-                    switch(place.priceLevel) {
-                        case 'PRICE_LEVEL_INEXPENSIVE': priceSymbol = '$'; break;
-                        case 'PRICE_LEVEL_MODERATE': priceSymbol = '$$'; break;
-                        case 'PRICE_LEVEL_EXPENSIVE': priceSymbol = '$$$'; break;
-                        case 'PRICE_LEVEL_VERY_EXPENSIVE': priceSymbol = '$$$$'; break;
-                    }
+
+            displayResults(places) {
+                const resultsElement = document.getElementById('results');
+                const countElement = document.getElementById('results-count');
+                
+                resultsElement.innerHTML = '';
+                countElement.textContent = `找到 ${places.length} 間店家`;
+
+                const mapManager = new MapManager(this.appState);
+                mapManager.addPlaceMarkers(places);
+
+                places.forEach(place => {
+                    const placeElement = this.createPlaceElement(place);
+                    resultsElement.appendChild(placeElement);
+                    
+                    // 調試：輸出營業時間資訊到控制台
+                    console.log(`店家: ${place.displayName}`, {
+                        regularOpeningHours: place.regularOpeningHours,
+                        businessStatus: place.businessStatus,
+                        openNow: place.regularOpeningHours?.openNow,
+                        periods: place.regularOpeningHours?.periods
+                    });
+                });
+            }
+
+            createPlaceElement(place) {
+                const placeItem = document.createElement('div');
+                placeItem.className = 'place-item';
+
+                const placeInfo = document.createElement('div');
+                placeInfo.className = 'place-info';
+
+                const title = document.createElement('h4');
+                title.textContent = place.displayName;
+
+                const meta = document.createElement('div');
+                meta.className = 'place-meta';
+
+                const rating = document.createElement('span');
+                rating.className = 'rating';
+                rating.textContent = Utils.formatRating(place.rating);
+
+                const priceLevel = document.createElement('span');
+                priceLevel.className = 'price-level';
+                const priceText = Utils.formatPrice(place.priceLevel);
+                if (priceText) {
+                    priceLevel.textContent = priceText;
                 }
-                const infoDiv = document.createElement('div');
-                infoDiv.innerHTML = `<h4>${place.displayName}</h4><p>${rating} ${priceSymbol ? '- ' + priceSymbol : ''}</p><p>${place.formattedAddress || '地址資訊不可用'}</p>`;
+
+                meta.appendChild(rating);
+                if (priceText) {
+                    meta.appendChild(priceLevel);
+                }
+
+                // 修正：簡化營業狀態判斷邏輯，避免提前 return
+                if (place.regularOpeningHours) {
+                    // 檢查營業狀態
+                    if (typeof place.regularOpeningHours.openNow !== 'undefined') {
+                        const status = document.createElement('span');
+                        const isOpen = place.regularOpeningHours.openNow;
+                        status.className = `opening-status ${isOpen ? 'open' : 'closed'}`;
+                        status.textContent = isOpen ? '營業中' : '已打烊';
+                        meta.appendChild(status);
+                    }
+                    // 如果沒有 openNow 資訊但有營業時間設定，不顯示狀態
+                } else if (place.businessStatus === 'OPERATIONAL') {
+                    // 如果沒有營業時間資訊但業務狀態正常，顯示營業中
+                    const status = document.createElement('span');
+                    status.className = 'opening-status open';
+                    status.textContent = '營業中';
+                    meta.appendChild(status);
+                }
+
+                const address = document.createElement('p');
+                address.className = 'place-address';
+                address.textContent = place.formattedAddress || '地址資訊不可用';
+
+                placeInfo.appendChild(title);
+                placeInfo.appendChild(meta);
+                placeInfo.appendChild(address);
+
+                const shareButtons = this.createShareButtons(place);
+                
+                placeItem.appendChild(placeInfo);
+                placeItem.appendChild(shareButtons);
+
+                // 點擊事件
+                placeItem.addEventListener('click', (e) => {
+                    if (!e.target.closest('.share-buttons')) {
+                        const mapManager = new MapManager(this.appState);
+                        mapManager.focusOnPlace(place);
+                    }
+                });
+
+                return placeItem;
+            }
+
+            createShareButtons(place) {
                 const shareContainer = document.createElement('div');
-                shareContainer.className = 'share-buttons-container';
-                const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.displayName)}&query_place_id=${place.id}`;
-                const shareTextForCopy = `嘿！我用「附近優質店家探測器」找到一家很棒的店：\n\n【${place.displayName}】\n\n推薦給你！\n點擊查看地圖：${googleMapsUrl}`;
+                shareContainer.className = 'share-buttons';
+
+                const shareText = Utils.createShareText(place);
+
+                // LINE 分享按鈕
                 const lineButton = document.createElement('a');
                 lineButton.className = 'share-btn';
                 lineButton.textContent = 'Line';
-                lineButton.href = `https://line.me/R/msg/text/?${encodeURIComponent(shareTextForCopy)}`;
+                lineButton.href = `https://line.me/R/msg/text/?${encodeURIComponent(shareText)}`;
                 lineButton.target = '_blank';
                 lineButton.rel = 'noopener noreferrer';
+
+                // 複製按鈕
                 const copyButton = document.createElement('button');
                 copyButton.className = 'share-btn';
                 copyButton.textContent = '複製';
-                copyButton.addEventListener('click', (event) => {
-                    event.stopPropagation();
-                    navigator.clipboard.writeText(shareTextForCopy).then(() => { 
-                        alert('店家資訊已複製！'); 
-                    }).catch(err => { console.error('複製失敗: ', err); });
+                copyButton.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const success = await Utils.copyToClipboard(shareText);
+                    if (success) {
+                        copyButton.textContent = '已複製!';
+                        setTimeout(() => {
+                            copyButton.textContent = '複製';
+                        }, 2000);
+                    } else {
+                        alert('複製失敗，請手動複製內容。');
+                    }
                 });
+
                 shareContainer.appendChild(lineButton);
                 shareContainer.appendChild(copyButton);
-                placeItemContainer.appendChild(infoDiv);
-                placeItemContainer.appendChild(shareContainer);
-                placeItemContainer.addEventListener('click', () => { 
-                    map.panTo(place.location); 
-                    map.setZoom(17); 
-                });
-                resultsDiv.appendChild(placeItemContainer);
-                const placeMarkerPin = new PinElement({ background: '#EA4335', borderColor: '#FFFFFF', glyphColor: '#FFFFFF' });
-                const marker = new AdvancedMarkerElement({ map: map, position: place.location, title: place.displayName, content: placeMarkerPin.element });
-                markers.push(marker);
-            });
-        }
-        
-        function drawWinner() {
-            if (currentResults.length === 0) { alert("請先搜尋，才能抽籤喔！"); return; }
-            const recommendationDiv = document.getElementById('recommendation');
-            const randomIndex = Math.floor(Math.random() * currentResults.length);
-            const winner = currentResults[randomIndex];
-            document.getElementById('winner-name').textContent = `🎉 ${winner.displayName} 🎉`;
-            recommendationDiv.style.display = 'block';
-            map.panTo(winner.location);
-            map.setZoom(17);
-        }
-        
-        function clearResults() {
-            markers.forEach(marker => { marker.map = null; });
-            markers = [];
-            currentResults = [];
-            document.getElementById('results').innerHTML = '';
-            document.getElementById('recommendation').style.display = 'none';
+
+                return shareContainer;
+            }
+
+            updateSearchButton(isLoading) {
+                const button = document.getElementById('search-button');
+                const buttonText = button.querySelector('.btn-text');
+                
+                if (isLoading) {
+                    button.disabled = true;
+                    buttonText.innerHTML = '<div class="loading-spinner"></div>搜尋中...';
+                } else {
+                    button.disabled = false;
+                    buttonText.textContent = '開始搜尋';
+                }
+            }
+
+            drawWinner() {
+                if (this.appState.currentResults.length === 0) {
+                    alert("請先搜尋，才能抽籤喔！");
+                    return;
+                }
+
+                const randomIndex = Math.floor(Math.random() * this.appState.currentResults.length);
+                const winner = this.appState.currentResults[randomIndex];
+                
+                const recommendationDiv = document.getElementById('recommendation');
+                const winnerNameDiv = document.getElementById('winner-name');
+                
+                winnerNameDiv.textContent = winner.displayName;
+                recommendationDiv.style.display = 'block';
+
+                const mapManager = new MapManager(this.appState);
+                mapManager.focusOnPlace(winner);
+
+                // 滾動到中獎店家
+                const resultsContainer = document.getElementById('results');
+                const placeItems = resultsContainer.querySelectorAll('.place-item');
+                const winnerElement = Array.from(placeItems).find(item => 
+                    item.querySelector('h4').textContent === winner.displayName
+                );
+                
+                if (winnerElement) {
+                    winnerElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    winnerElement.style.background = 'linear-gradient(135deg, #fff3cd 0%, #fef8e1 100%)';
+                    setTimeout(() => {
+                        winnerElement.style.background = '';
+                    }, 3000);
+                }
+            }
         }
 
-        window.initMap = init;
+        // 應用程式主類
+        class StoreDetectorApp {
+            constructor() {
+                this.appState = new AppState();
+                this.mapManager = new MapManager(this.appState);
+                this.searchManager = new SearchManager(this.appState);
+            }
+
+            async initialize() {
+                try {
+                    // 初始化地圖
+                    const mapInitialized = await this.mapManager.initialize();
+                    if (!mapInitialized) {
+                        return false;
+                    }
+
+                    // 綁定事件監聽器
+                    this.bindEventListeners();
+                    
+                    // 設置初始狀態
+                    this.setupInitialState();
+                    
+                    console.log('應用程式初始化完成');
+                    return true;
+                } catch (error) {
+                    console.error('應用程式初始化失敗:', error);
+                    Utils.showError('應用程式載入失敗，請重新整理頁面。');
+                    return false;
+                }
+            }
+
+            bindEventListeners() {
+                // 搜尋按鈕
+                document.getElementById('search-button').addEventListener('click', () => {
+                    this.searchManager.searchNearbyPlaces();
+                });
+
+                // 抽籤按鈕
+                document.getElementById('draw-button').addEventListener('click', () => {
+                    this.searchManager.drawWinner();
+                });
+
+                // 距離滑桿
+                document.getElementById('radius-slider').addEventListener('input', (e) => {
+                    document.getElementById('radius-value').textContent = e.target.value / 1000;
+                });
+
+                // 關鍵字輸入框 - 添加防抖動搜尋
+                const keywordInput = document.getElementById('keyword-input');
+                const debouncedSearch = Utils.debounce(() => {
+                    if (this.appState.currentResults.length > 0) {
+                        this.searchManager.searchNearbyPlaces();
+                    }
+                }, 1000);
+                
+                keywordInput.addEventListener('input', debouncedSearch);
+
+                // Enter鍵搜尋
+                keywordInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        this.searchManager.searchNearbyPlaces();
+                    }
+                });
+
+                // 篩選條件變更時的自動搜尋（可選）
+                const autoSearchElements = ['type-select', 'price-select', 'open-now-checkbox'];
+                autoSearchElements.forEach(id => {
+                    document.getElementById(id).addEventListener('change', () => {
+                        if (this.appState.currentResults.length > 0) {
+                            // 延遲自動搜尋，避免過於頻繁
+                            setTimeout(() => {
+                                this.searchManager.searchNearbyPlaces();
+                            }, 500);
+                        }
+                    });
+                });
+
+                // 視窗大小變更時重新調整地圖
+                window.addEventListener('resize', Utils.debounce(() => {
+                    if (this.appState.map) {
+                        google.maps.event.trigger(this.appState.map, 'resize');
+                    }
+                }, 250));
+
+                // 鍵盤快捷鍵
+                document.addEventListener('keydown', (e) => {
+                    // Ctrl+Enter 或 Cmd+Enter 快速搜尋
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                        e.preventDefault();
+                        this.searchManager.searchNearbyPlaces();
+                    }
+                    
+                    // 按 R 鍵抽籤
+                    if (e.key === 'r' || e.key === 'R') {
+                        if (this.appState.currentResults.length > 0 && !e.ctrlKey && !e.metaKey) {
+                            e.preventDefault();
+                            this.searchManager.drawWinner();
+                        }
+                    }
+                });
+
+                // 處理頁面離開前的清理
+                window.addEventListener('beforeunload', () => {
+                    this.cleanup();
+                });
+            }
+
+            setupInitialState() {
+                // 設置初始的距離顯示
+                const radiusSlider = document.getElementById('radius-slider');
+                document.getElementById('radius-value').textContent = radiusSlider.value / 1000;
+
+                // 設置輸入框的 placeholder 提示
+                const keywordInput = document.getElementById('keyword-input');
+                const typeSelect = document.getElementById('type-select');
+                
+                typeSelect.addEventListener('change', () => {
+                    const selectedType = typeSelect.value;
+                    const placeholders = {
+                        'restaurant': '例如: 拉麵、不限時、素食...',
+                        'cafe': '例如: 手沖咖啡、不限時、WiFi...',
+                        'clothing_store': '例如: 韓系、vintage、大尺碼...',
+                        'art_gallery': '例如: 當代藝術、攝影展...',
+                        'book_store': '例如: 二手書、文具、咖啡...',
+                        'store': '例如: 手作、設計、禮品...'
+                    };
+                    keywordInput.placeholder = placeholders[selectedType] || '輸入關鍵字...';
+                });
+
+                // 觸發初始 placeholder 設置
+                typeSelect.dispatchEvent(new Event('change'));
+            }
+
+            cleanup() {
+                // 清理地圖標記
+                this.appState.clearMarkers();
+                
+                // 清理事件監聽器
+                if (this.appState.map) {
+                    google.maps.event.clearInstanceListeners(this.appState.map);
+                }
+            }
+
+            // 公共方法：供外部調用
+            getCurrentResults() {
+                return this.appState.currentResults;
+            }
+
+            getMap() {
+                return this.appState.map;
+            }
+
+            getUserLocation() {
+                return this.appState.userLocation;
+            }
+        }
+
+        // 全局應用程式實例
+        let storeDetectorApp;
+
+        // 初始化函數
+        async function initializeApp() {
+            try {
+                storeDetectorApp = new StoreDetectorApp();
+                const success = await storeDetectorApp.initialize();
+                
+                if (success) {
+                    console.log('🎉 附近優質店家探測器 V3.0 已準備就緒！');
+                    
+                    // 添加一些有用的控制台命令供開發除錯使用
+                    if (typeof window !== 'undefined') {
+                        window.storeDetector = {
+                            app: storeDetectorApp,
+                            search: () => storeDetectorApp.searchManager.searchNearbyPlaces(),
+                            draw: () => storeDetectorApp.searchManager.drawWinner(),
+                            results: () => storeDetectorApp.getCurrentResults(),
+                            location: () => storeDetectorApp.getUserLocation()
+                        };
+                    }
+                } else {
+                    console.error('應用程式初始化失敗');
+                }
+            } catch (error) {
+                console.error('初始化過程發生錯誤:', error);
+                Utils.showError('系統載入失敗，請重新整理頁面或檢查網路連線。');
+            }
+        }
+
+        // 錯誤處理
+        window.addEventListener('error', (event) => {
+            console.error('全局錯誤:', event.error);
+            // 不要在生產環境中顯示詳細錯誤信息
+            Utils.showError('發生未預期的錯誤，請重新整理頁面。');
+        });
+
+        window.addEventListener('unhandledrejection', (event) => {
+            console.error('未處理的 Promise 拒絕:', event.reason);
+            event.preventDefault();
+        });
+
+        // Google Maps API 回調函數
+        window.initMap = initializeApp;
+
+        // DOM 載入完成後的備用初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            // 如果 Google Maps API 已經載入但回調未執行
+            if (typeof google !== 'undefined' && google.maps && !storeDetectorApp) {
+                initializeApp();
+            }
+        });
     </script>
-    
+
+    <!-- Google Maps API -->
     <script async defer 
             src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDvKC9RDnx1uUCYrOcm9Mb0IRg00J0PA1c&libraries=maps,marker,places&callback=initMap&loading=async">
     </script>
