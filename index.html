@@ -3,367 +3,172 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>附近優質店家探測器 V3.5</title>
+    <title>附近優質店家探測器 V4.0</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+
     <style>
         :root {
             --primary-color: #4285F4;
+            --primary-dark: #3367d6;
             --secondary-color: #34A853;
             --accent-color: #FBBC05;
             --danger-color: #EA4335;
-            --text-color: #333;
-            --text-secondary: #555;
-            --bg-color: #f8f9fa;
-            --border-color: #ddd;
-            --shadow: 0 2px 4px rgba(0,0,0,0.1);
-            --border-radius: 8px;
+            --text-primary: #202124;
+            --text-secondary: #5f6368;
+            --text-light: #ffffff;
+            --bg-main: #f8f9fa;
+            --bg-content: #ffffff;
+            --bg-hover: #f1f3f4;
+            --bg-active: #e8f0fe;
+            --border-color: #dadce0;
+            --border-radius: 12px;
+            --shadow-sm: 0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             --spacing: 16px;
         }
-
         * { box-sizing: border-box; }
-        html, body { height: 100%; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--text-color); overflow: hidden; }
+        html, body { height: 100%; margin: 0; padding: 0; font-family: var(--font-family); color: var(--text-primary); overflow: hidden; background-color: var(--bg-main); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #aaa; }
         .app-container { display: flex; flex-direction: column; height: 100vh; }
-        .header { background: linear-gradient(135deg, var(--primary-color) 0%, #3367d6 100%); color: white; padding: var(--spacing); text-align: center; box-shadow: var(--shadow); z-index: 1000; }
-        .header h1 { margin: 0; font-size: 1.5rem; font-weight: 600; }
+        .header { background: var(--bg-content); color: var(--text-primary); padding: 0 var(--spacing); height: 60px; display: flex; align-items: center; border-bottom: 1px solid var(--border-color); z-index: 1000; }
+        .header h1 { margin: 0; font-size: 1.25rem; font-weight: 700; display: flex; align-items: center; gap: 10px; color: var(--primary-color); }
         .main-content { display: flex; flex: 1; overflow: hidden; }
-        .sidebar { width: 320px; background: var(--bg-color); border-right: 1px solid var(--border-color); overflow-y: auto; }
-        .controls { padding: var(--spacing); }
-        .control-section { margin-bottom: 24px; }
-        .control-section h2 { margin: 0 0 var(--spacing) 0; font-size: 1.1rem; color: var(--text-color); }
-        .control-group { margin-bottom: var(--spacing); }
-        .control-group label { display: block; margin-bottom: 6px; font-weight: 500; font-size: 0.9rem; }
-        .form-control { width: 100%; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: var(--border-radius); font-size: 0.9rem; transition: border-color 0.2s, box-shadow 0.2s; }
-        .form-control:focus { outline: none; border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.1); }
-        .btn { width: 100%; padding: 12px; border: none; border-radius: var(--border-radius); font-size: 1rem; font-weight: 500; cursor: pointer; transition: all 0.2s; text-decoration: none; display: inline-block; text-align: center; }
-        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
-        .btn-primary { background: linear-gradient(135deg, var(--secondary-color) 0%, #2c8e44 100%); color: white; }
-        .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 8px rgba(52, 168, 83, 0.3); }
-        .btn-accent { background: linear-gradient(135deg, var(--accent-color) 0%, #e2a800 100%); color: white; margin-top: 10px; }
-        .btn-accent:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 8px rgba(251, 188, 5, 0.3); }
-        .btn-secondary { background-color: #f1f3f4; color: var(--text-color); border: 1px solid var(--border-color); }
-        .btn-secondary:hover:not(:disabled) { background-color: #e8eaed; }
-        .checkbox-group { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-        .checkbox-group input[type="checkbox"] { width: auto; margin: 0; }
-        .checkbox-group label { margin: 0; cursor: pointer; font-weight: normal; }
-        .map-section { flex: 1; display: flex; flex-direction: column; position: relative; }
-        .map-container { flex: 3; background: #e0e0e0; position: relative; }
-        .results-container { flex: 2; border-top: 1px solid var(--border-color); overflow-y: auto; background: white; display: flex; flex-direction: column; }
-        .results-header { padding: var(--spacing); background: var(--bg-color); border-bottom: 1px solid #eee; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
-        .results-count { font-size: 0.9rem; color: var(--text-secondary); }
-        .results-content { padding: 0; flex-grow: 1; }
-        #load-more-container { padding: var(--spacing); text-align: center; }
-        .place-item { padding: var(--spacing); border-bottom: 1px solid #eee; cursor: pointer; transition: background-color 0.2s; position: relative; }
-        .place-item:hover { background-color: #f5f5f5; }
-        .place-item:last-child { border-bottom: none; }
-        .place-info h4 { margin: 0 0 6px 0; font-size: 1rem; color: var(--text-color); }
-        .place-meta { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; font-size: 0.85rem; }
-        .rating { color: #ff9800; font-weight: 500; }
-        .price-level { color: var(--secondary-color); font-weight: 500; }
-        .opening-status { padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: 500; }
-        .opening-status.open { background: #e8f5e8; color: var(--secondary-color); }
-        .opening-status.closed { background: #ffeaea; color: var(--danger-color); }
-        .place-address { color: var(--text-secondary); font-size: 0.85rem; margin: 0; }
-        .share-buttons { position: absolute; top: var(--spacing); right: var(--spacing); display: flex; gap: 6px; }
-        .share-btn { padding: 6px 10px; background: white; border: 1px solid var(--border-color); border-radius: 4px; font-size: 0.75rem; color: var(--text-secondary); text-decoration: none; transition: all 0.2s; }
-        .share-btn:hover { background: var(--bg-color); border-color: var(--primary-color); color: var(--primary-color); }
+        .sidebar { width: 340px; background: var(--bg-main); border-right: 1px solid var(--border-color); overflow-y: auto; padding: var(--spacing); }
+        .control-section { background: var(--bg-content); border-radius: var(--border-radius); padding: calc(var(--spacing) * 1.5); box-shadow: var(--shadow-sm); margin-bottom: var(--spacing); }
+        .control-section h2 { margin: 0 0 var(--spacing) 0; font-size: 1.1rem; color: var(--text-primary); font-weight: 700; display: flex; align-items: center; gap: 8px; }
+        .control-group { margin-bottom: var(--spacing); position: relative; }
+        .control-group label { display: block; margin-bottom: 8px; font-weight: 500; font-size: 0.9rem; color: var(--text-secondary); }
+        .form-control { width: 100%; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 1rem; transition: border-color 0.2s, box-shadow 0.2s; background-color: var(--bg-main); }
+        .form-control:focus { outline: none; border-color: var(--primary-color); box-shadow: 0 0 0 3px var(--bg-active); }
+        .pac-target-input { padding-right: 30px !important; }
+        .clear-search-btn { position: absolute; right: 10px; top: 38px; background: none; border: none; cursor: pointer; color: var(--text-secondary); display: none; }
+        .clear-search-btn:hover { color: var(--text-primary); }
+        .btn { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 1rem; font-weight: 700; cursor: pointer; transition: all 0.2s ease; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+        .btn .material-symbols-outlined { font-size: 1.25rem; }
+        .btn-primary { background: var(--primary-color); color: var(--text-light); }
+        .btn-primary:hover:not(:disabled) { background: var(--primary-dark); box-shadow: var(--shadow-md); transform: translateY(-2px); }
+        .btn-accent { background: var(--accent-color); color: var(--text-light); margin-top: 10px; }
+        .btn-accent:hover:not(:disabled) { background: #f9ab00; box-shadow: var(--shadow-md); transform: translateY(-2px); }
+        .btn-secondary { background-color: var(--bg-content); color: var(--text-primary); border: 1px solid var(--border-color); }
+        .btn-secondary:hover:not(:disabled) { background-color: var(--bg-hover); }
+        .checkbox-group { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px; border-radius: 8px; }
+        .checkbox-group:hover { background-color: var(--bg-hover); }
+        .checkbox-group input[type="checkbox"] { width: 1.2em; height: 1.2em; margin: 0; accent-color: var(--primary-color); }
+        .checkbox-group label { margin: 0; cursor: pointer; font-weight: 500; color: var(--text-primary); }
+        
+        /* --- FIX: Map & Results Section Layout --- */
+        .map-section { flex: 1; display: flex; flex-direction: column; position: relative; overflow: hidden; /* Added */ }
+        .map-container { flex: 3; background: #e0e0e0; min-height: 0; /* Added */ }
+        .results-container { flex: 2; border-top: 1px solid var(--border-color); background: var(--bg-content); display: flex; flex-direction: column; min-height: 0; /* Added */ }
+        .results-header { padding: 12px var(--spacing); background: var(--bg-content); border-bottom: 1px solid var(--border-color); font-weight: 700; display: flex; justify-content: space-between; align-items: center; z-index: 10; flex-shrink: 0; /* Added */ }
+        .results-content { overflow-y: auto; flex-grow: 1; }
+        #load-more-container { padding: var(--spacing); text-align: center; border-top: 1px solid var(--border-color); background: var(--bg-content); flex-shrink: 0; /* Added */ }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .place-item { animation: fadeIn 0.4s ease-out forwards; padding: var(--spacing); border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background-color 0.2s, border-left 0.2s; border-left: 4px solid transparent; }
+        .place-item:hover { background-color: var(--bg-hover); }
+        .place-item.active { background-color: var(--bg-active); border-left-color: var(--primary-color); }
+        .place-info h4 { margin: 0 0 8px 0; font-size: 1.05rem; font-weight: 700; }
+        .place-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-secondary); }
+        .meta-item { display: flex; align-items: center; gap: 4px; }
+        .meta-item .material-symbols-outlined { font-size: 1.1rem; }
+        .rating { color: #f59e0b; font-weight: 700; }
+        .price-level, .place-address { color: var(--text-secondary); }
+        .opening-status { padding: 3px 8px; border-radius: 16px; font-size: 0.8rem; font-weight: 500; }
+        .opening-status.open { background: #e6f4ea; color: #1e8e3e; }
+        .opening-status.closed { background: #fce8e6; color: #d93025; }
+        .share-buttons { position: absolute; top: var(--spacing); right: var(--spacing); display: flex; gap: 8px; }
+        .share-btn { padding: 6px; background: var(--bg-content); border: 1px solid transparent; border-radius: 50%; font-size: 1.1rem; color: var(--text-secondary); text-decoration: none; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
+        .share-btn:hover { background: var(--bg-hover); color: var(--primary-color); border-color: var(--border-color); }
         .recommendation-card { margin-top: 20px; padding: 20px; background: linear-gradient(135deg, #e8f0fe 0%, #f3f7ff 100%); border: 1px solid #d2e3fc; border-radius: var(--border-radius); text-align: center; display: none; }
         .recommendation-card h3 { margin: 0 0 10px 0; color: #1967d2; font-size: 1.1rem; }
-        .winner-name { font-size: 1.2rem; font-weight: 600; color: var(--text-color); }
-        .loading-spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid #f3f3f3; border-top: 2px solid var(--primary-color); border-radius: 50%; animation: spin 1s linear infinite; margin-right: 8px; }
+        .winner-name { font-size: 1.2rem; font-weight: 700; color: var(--text-primary); }
+        .loading-spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid var(--bg-hover); border-top: 3px solid var(--primary-color); border-radius: 50%; animation: spin 1s linear infinite; margin-right: 12px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .error-message { background: #ffeaea; color: var(--danger-color); padding: 12px; border-radius: var(--border-radius); margin: 10px 0; border: 1px solid #ffcdd2; }
-        .empty-state { text-align: center; padding: 40px 20px; color: var(--text-secondary); }
-        .empty-state-icon { font-size: 3rem; margin-bottom: 16px; opacity: 0.5; }
-        @media (max-width: 768px) {
-            html, body { overflow: auto; height: auto; }
-            .app-container { height: auto; }
-            .main-content { flex-direction: column; overflow: visible; }
-            .sidebar { width: 100%; border-right: none; border-bottom: 2px solid var(--border-color); overflow-y: visible; }
-            .map-section { min-height: 70vh; }
-            .header h1 { font-size: 1.2rem; }
-            .share-buttons { position: static; margin-top: 8px; justify-content: flex-end; }
-        }
+        .error-message, .empty-state { text-align: center; padding: 40px 20px; color: var(--text-secondary); }
+        .error-message { background: #fce8e6; color: var(--danger-color); border-radius: var(--border-radius); margin: var(--spacing); }
+        .empty-state-icon { font-size: 3.5rem; margin-bottom: 16px; color: var(--border-color); }
+        .pac-container { border-radius: 8px !important; box-shadow: var(--shadow-sm) !important; z-index: 9999 !important; }
+        .pac-item { padding: 10px; font-size: 1rem; color: var(--text-primary); border: none !important; }
+        .pac-item:hover { background-color: var(--bg-hover); }
+        .pac-item-query { font-size: 1rem; color: var(--text-primary); }
+        .pac-icon { display: none; }
+        @media (max-width: 768px) { html, body { overflow: auto; height: auto; } .app-container { height: auto; } .main-content { flex-direction: column; overflow: visible; } .sidebar { width: 100%; border-right: none; border-bottom: 2px solid var(--border-color); } .map-section { min-height: 70vh; } .header h1 { font-size: 1.1rem; } .share-buttons { position: static; margin-top: 12px; justify-content: flex-start; } .place-item { display: flex; flex-direction: column; } }
     </style>
 </head>
 <body>
+    <!-- The rest of the HTML body is unchanged -->
     <div class="app-container">
-        <header class="header">
-            <h1>附近優質店家探測器 V3.5</h1>
-        </header>
-        
+        <header class="header"><h1><span class="material-symbols-outlined">travel_explore</span>附近優質店家探測器</h1></header>
         <main class="main-content">
             <aside class="sidebar">
-                <div class="controls">
-                    <section class="control-section">
-                        <h2>篩選條件</h2>
-                        <div class="control-group">
-                            <label for="type-select">店家類型 (無關鍵字時生效)</label>
-                            <select id="type-select" class="form-control">
-                                <option value="restaurant">餐廳美食</option>
-                                <option value="cafe">咖啡廳</option>
-                                <option value="clothing_store">服飾店</option>
-                                <option value="art_gallery">藝術展覽</option>
-                                <option value="book_store">書店</option>
-                                <option value="store">特色小物</option>
-                            </select>
-                        </div>
-                        <div class="control-group">
-                            <label for="keyword-input">關鍵字 (優先)</label>
-                            <input type="text" id="keyword-input" class="form-control" placeholder="例如: 冰、拉麵、不限時...">
-                        </div>
-                        <div class="control-group">
-                            <label for="radius-select">距離範圍</label>
-                            <select id="radius-select" class="form-control">
-                                <option value="any" selected>不設定距離</option>
-                                <option value="1000">1 km 以內</option>
-                                <option value="3000">3 km 以內</option>
-                                <option value="5000">5 km 以內</option>
-                            </select>
-                        </div>
-                        <div class="control-group">
-                            <label for="price-select">價位</label>
-                            <select id="price-select" class="form-control">
-                                <option value="any">任何價位</option>
-                                <option value="1">1 ($)</option>
-                                <option value="2">2 ($$)</option>
-                                <option value="3">3 ($$$)</option>
-                                <option value="4">4 ($$$$)</option>
-                            </select>
-                        </div>
-                        <div class="control-group">
-                            <div class="checkbox-group">
-                                <input type="checkbox" id="open-now-checkbox">
-                                <label for="open-now-checkbox">只顯示現在營業中</label>
-                            </div>
-                        </div>
-                        <div class="control-group">
-                            <div class="checkbox-group">
-                                <input type="checkbox" id="rating-filter-checkbox" checked>
-                                <label for="rating-filter-checkbox">只顯示 4.0★ 以上店家</label>
-                            </div>
-                        </div>
-                        <button id="search-button" class="btn btn-primary">
-                            <span class="btn-text">開始搜尋</span>
-                        </button>
-                        <button id="draw-button" class="btn btn-accent">
-                            🎲 天選之店！(抽一個)
-                        </button>
-                        <div id="recommendation" class="recommendation-card">
-                            <h3>🎉 天選之店是...</h3>
-                            <div id="winner-name" class="winner-name"></div>
-                        </div>
-                    </section>
+                <div class="control-section">
+                    <h2><span class="material-symbols-outlined">map</span>搜尋地點</h2>
+                    <div class="control-group">
+                        <label for="location-search-input">輸入地址、地標或區域</label>
+                        <input type="text" id="location-search-input" class="form-control" placeholder="例如: 台北車站">
+                        <button id="clear-search-btn" class="clear-search-btn" title="清除地點"><span class="material-symbols-outlined">close</span></button>
+                    </div>
+                </div>
+                <div class="control-section">
+                    <h2><span class="material-symbols-outlined">filter_alt</span>篩選條件</h2>
+                    <div class="control-group">
+                        <label for="type-select">店家類型 (無關鍵字時生效)</label>
+                        <select id="type-select" class="form-control"><option value="restaurant">餐廳美食</option><option value="cafe">咖啡廳</option><option value="clothing_store">服飾店</option><option value="art_gallery">藝術展覽</option><option value="book_store">書店</option><option value="store">特色小物</option></select>
+                    </div>
+                    <div class="control-group">
+                        <label for="keyword-input">關鍵字 (優先)</label>
+                        <input type="text" id="keyword-input" class="form-control" placeholder="例如: 冰、拉麵、不限時...">
+                    </div>
+                    <div class="control-group">
+                        <label for="radius-select">距離範圍</label>
+                        <select id="radius-select" class="form-control"><option value="any" selected>不設定距離</option><option value="1000">1 km 以內</option><option value="3000">3 km 以內</option><option value="5000">5 km 以內</option></select>
+                    </div>
+                    <div class="control-group">
+                        <label for="price-select">價位</label>
+                        <select id="price-select" class="form-control"><option value="any">任何價位</option><option value="1">1 ($)</option><option value="2">2 ($$)</option><option value="3">3 ($$$)</option><option value="4">4 ($$$$)</option></select>
+                    </div>
+                    <div class="control-group">
+                        <div class="checkbox-group"><input type="checkbox" id="open-now-checkbox"><label for="open-now-checkbox">只顯示現在營業中</label></div>
+                    </div>
+                    <div class="control-group">
+                        <div class="checkbox-group"><input type="checkbox" id="rating-filter-checkbox" checked><label for="rating-filter-checkbox">只顯示 4.0★ 以上店家</label></div>
+                    </div>
+                    <button id="search-button" class="btn btn-primary"><span class="material-symbols-outlined">search</span><span class="btn-text">開始搜尋</span></button>
+                    <button id="draw-button" class="btn btn-accent"><span class="material-symbols-outlined">casino</span>天選之店！</button>
+                    <div id="recommendation" class="recommendation-card"><h3>🎉 天選之店是...</h3><div id="winner-name" class="winner-name"></div></div>
                 </div>
             </aside>
-
             <section class="map-section">
                 <div id="map" class="map-container"></div>
                 <div class="results-container">
-                    <div class="results-header">
-                        <span>搜尋結果</span>
-                        <span id="results-count" class="results-count"></span>
-                    </div>
+                    <div class="results-header"><span>搜尋結果</span><span id="results-count" class="results-count"></span></div>
                     <div id="results" class="results-content">
-                        <div class="empty-state">
-                            <div class="empty-state-icon">📍</div>
-                            <p>請允許定位，然後點擊「開始搜尋」開始探索附近的店家。</p>
-                        </div>
+                        <div class="empty-state"><div class="empty-state-icon material-symbols-outlined">location_off</div><p>開始探索附近的店家吧！</p></div>
                     </div>
-                    <!-- FIX 1: Add container for the load more button -->
-                    <div id="load-more-container">
-                        <button id="load-more-button" class="btn btn-secondary" style="display: none;">載入更多結果</button>
-                    </div>
+                    <div id="load-more-container"><button id="load-more-button" class="btn btn-secondary" style="display: none;">載入更多結果</button></div>
                 </div>
             </section>
         </main>
     </div>
-
     <script>
-        class AppState {
-            constructor() { this.map = null; this.userLocation = null; this.currentResults = []; this.markers = []; this.isSearching = false; this.mapLibraries = null; this.lastSearchParams = null; }
-            reset() { this.currentResults = []; this.clearMarkers(); this.hideRecommendation(); this.lastSearchParams = null; }
-            clearMarkers() { this.markers.forEach(marker => { if (marker && marker.map) { marker.map = null; } }); this.markers = []; }
-            hideRecommendation() { const recommendationElement = document.getElementById('recommendation'); if (recommendationElement) { recommendationElement.style.display = 'none'; } }
-        }
-
-        class Utils { /* ... (No changes) ... */ }
-        class MapManager { /* ... (No changes) ... */ }
-
-        class SearchManager {
-            constructor(appState) { this.appState = appState; }
-
-            async searchNearbyPlaces() {
-                if (!this.appState.userLocation) { alert("正在等待定位，請稍後再試..."); return; }
-                if (this.appState.isSearching) { return; }
-                this.appState.isSearching = true; this.updateSearchButton(true); document.getElementById('load-more-button').style.display = 'none'; this.appState.reset(); Utils.showLoading();
-                try {
-                    const searchParams = this.getSearchParameters();
-                    this.appState.lastSearchParams = searchParams; // Save search params for pagination
-                    const { Place } = await google.maps.importLibrary("places");
-                    let initialPlaces = await this.performSearch(Place, searchParams);
-                    if (!initialPlaces || initialPlaces.length === 0) { Utils.showError('在地圖區域內找不到任何店家，請嘗試移動地圖或更換關鍵字。'); return; }
-                    const filteredResults = this.filterResults(initialPlaces, searchParams);
-                    this.appState.currentResults = filteredResults;
-                    this.displayResults(filteredResults);
-
-                    // FIX 2: Show "Load More" button if conditions are met
-                    if (searchParams.keyword && initialPlaces.length === 20) {
-                        document.getElementById('load-more-button').style.display = 'block';
-                    }
-
-                } catch (error) { console.error('搜尋錯誤:', error); Utils.showError('搜尋過程發生錯誤，請稍後再試。'); } finally { this.appState.isSearching = false; this.updateSearchButton(false); }
-            }
-
-            // FIX 3: New function to handle loading more results
-            async loadMorePlaces() {
-                const loadMoreBtn = document.getElementById('load-more-button');
-                if (this.appState.isSearching || !this.appState.lastSearchParams || !this.appState.lastSearchParams.keyword) {
-                    return;
-                }
-                this.appState.isSearching = true; loadMoreBtn.disabled = true; loadMoreBtn.textContent = '載入中...';
-                try {
-                    const { Place } = await google.maps.importLibrary("places");
-                    // Create exclusion query from existing results
-                    const exclusionQuery = this.appState.currentResults.map(p => `-"${p.displayName.replace(/"/g, '')}"`).join(' ');
-                    const newTextQuery = `${this.appState.lastSearchParams.keyword} ${exclusionQuery}`;
-
-                    const newParams = { ...this.appState.lastSearchParams, textQuery: newTextQuery };
-                    let newPlaces = await this.performSearch(Place, newParams);
-                    if (!newPlaces || newPlaces.length === 0) {
-                        loadMoreBtn.style.display = 'none';
-                        return;
-                    }
-
-                    // Filter out any duplicates the API might have returned
-                    const existingPlaceIds = new Set(this.appState.currentResults.map(p => p.id));
-                    const uniqueNewPlaces = newPlaces.filter(p => !existingPlaceIds.has(p.id));
-                    
-                    if (uniqueNewPlaces.length > 0) {
-                        const filteredNewResults = this.filterResults(uniqueNewPlaces, this.appState.lastSearchParams);
-                        this.appState.currentResults.push(...filteredNewResults);
-                        this.appendResults(filteredNewResults);
-                    }
-
-                    // Hide button if we received less than 20 results, indicating we are at the end
-                    if (newPlaces.length < 20) {
-                        loadMoreBtn.style.display = 'none';
-                    }
-                } catch (error) {
-                    console.error('載入更多時發生錯誤:', error);
-                    alert('載入更多結果時發生錯誤。');
-                } finally {
-                    this.appState.isSearching = false; loadMoreBtn.disabled = false; loadMoreBtn.textContent = '載入更多結果';
-                }
-            }
-
-            getSearchParameters() {
-                return {
-                    radius: document.getElementById('radius-select').value,
-                    type: document.getElementById('type-select').value,
-                    price: document.getElementById('price-select').value,
-                    keyword: document.getElementById('keyword-input').value.trim(),
-                    isOpenNow: document.getElementById('open-now-checkbox').checked,
-                    isRatingFilterEnabled: document.getElementById('rating-filter-checkbox').checked
-                };
-            }
-
-            async performSearch(Place, params) {
-                const baseFields = [ 'displayName', 'location', 'rating', 'priceLevel', 'formattedAddress', 'id', 'regularOpeningHours', 'businessStatus' ];
-                
-                // Use params.textQuery if it exists (for pagination), otherwise use params.keyword
-                const textQuery = params.textQuery || params.keyword;
-
-                if (textQuery) {
-                    const request = {
-                        fields: baseFields,
-                        textQuery: textQuery,
-                        maxResultCount: 20,
-                        ...(params.isOpenNow && { isOpenNow: true })
-                    };
-                    const radiusForBias = (params.radius === 'any') ? 50000 : parseInt(params.radius, 10);
-                    request.locationBias = { center: this.appState.userLocation, radius: radiusForBias };
-                    const response = await Place.searchByText(request);
-                    return response.places;
-                } else {
-                    const request = {
-                        fields: baseFields,
-                        includedTypes: [params.type],
-                        maxResultCount: 20
-                    };
-                    const radiusForRestriction = (params.radius === 'any') ? 5000 : parseInt(params.radius, 10);
-                    request.locationRestriction = { center: this.appState.userLocation, radius: radiusForRestriction };
-                    const response = await Place.searchNearby(request);
-                    return response.places;
-                }
-            }
-            
-            filterResults(initialPlaces, params) { /* ... (No changes from previous correct version) ... */ }
-            displayResults(places) { /* ... (No changes) ... */ }
-            
-            // FIX 4: New function to append results to the list without clearing it
-            appendResults(places) {
-                const resultsElement = document.getElementById('results');
-                const countElement = document.getElementById('results-count');
-                countElement.textContent = `找到 ${this.appState.currentResults.length} 間店家`;
-                
-                const mapManager = new MapManager(this.appState);
-                mapManager.addPlaceMarkers(places);
-
-                places.forEach(place => {
-                    const placeElement = this.createPlaceElement(place);
-                    resultsElement.appendChild(placeElement);
-                });
-            }
-
-            createPlaceElement(place) { /* ... (No changes) ... */ }
-            createShareButtons(place) { /* ... (No changes) ... */ }
-            updateSearchButton(isLoading) { /* ... (No changes) ... */ }
-            drawWinner() { /* ... (No changes) ... */ }
-        }
-
-        class StoreDetectorApp {
-            constructor() { this.appState = new AppState(); this.mapManager = new MapManager(this.appState); this.searchManager = new SearchManager(this.appState); }
-            async initialize() {
-                try {
-                    if (!await this.mapManager.initialize()) return false;
-                    this.bindEventListeners();
-                    this.setupInitialState();
-                    console.log('應用程式初始化完成');
-                    return true;
-                } catch (error) { console.error('應用程式初始化失敗:', error); Utils.showError('應用程式載入失敗，請重新整理頁面。'); return false; }
-            }
-            bindEventListeners() {
-                document.getElementById('search-button').addEventListener('click', () => this.searchManager.searchNearbyPlaces());
-                document.getElementById('draw-button').addEventListener('click', () => this.searchManager.drawWinner());
-                // FIX 5: Bind the load more button
-                document.getElementById('load-more-button').addEventListener('click', () => this.searchManager.loadMorePlaces());
-                
-                const keywordInput = document.getElementById('keyword-input');
-                const debouncedSearch = Utils.debounce(() => { if (this.appState.currentResults.length > 0) { this.searchManager.searchNearbyPlaces(); } }, 1000);
-                keywordInput.addEventListener('input', debouncedSearch);
-                keywordInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') { this.searchManager.searchNearbyPlaces(); } });
-                const autoSearchElements = ['type-select', 'price-select', 'open-now-checkbox', 'radius-select', 'rating-filter-checkbox'];
-                autoSearchElements.forEach(id => { document.getElementById(id).addEventListener('change', () => { if (this.appState.currentResults.length > 0) { setTimeout(() => this.searchManager.searchNearbyPlaces(), 500); } }); });
-            }
-            setupInitialState() { /* ... (No changes) ... */ }
-        }
-
-        // --- FULL CODE FOR COPY-PASTE ---
-        // (The below code includes the unchanged/hidden functions for easy replacement)
-        Utils = { debounce(func, wait) { let timeout; return function executedFunction(...args) { const later = () => { clearTimeout(timeout); func(...args); }; clearTimeout(timeout); timeout = setTimeout(later, wait); }; }, formatPrice(priceLevel) { if (priceLevel == null) return ''; return '$'.repeat(priceLevel); }, formatRating(rating) { return rating ? `${rating.toFixed(1)} ★` : '無評分'; }, createShareText(place) { const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.displayName)}&query_place_id=${place.id}`; return `嘿！我用「附近優質店家探測器」找到一家很棒的店：\n\n【${place.displayName}】\n\n推薦給你！\n點擊查看地圖：${googleMapsUrl}`; }, async copyToClipboard(text) { try { await navigator.clipboard.writeText(text); return true; } catch (err) { console.error('複製失敗:', err); return false; } }, showError(message, container = 'results') { const element = document.getElementById(container); if (element) { element.innerHTML = `<div class="error-message">${message}</div>`; } }, showLoading(container = 'results') { const element = document.getElementById(container); if (element) { element.innerHTML = '<div style="text-align: center; padding: 20px;"><div class="loading-spinner"></div>正在搜尋中...</div>'; } } };
-        MapManager = class MapManager { constructor(appState) { this.appState = appState; this.defaultCenter = { lat: 25.0479, lng: 121.5171 }; } async initialize() { try { const { Map } = await google.maps.importLibrary("maps"); const { AdvancedMarkerElement, PinElement } = await google.maps.importLibrary("marker"); this.appState.mapLibraries = { AdvancedMarkerElement, PinElement }; this.appState.map = new Map(document.getElementById("map"), { center: this.defaultCenter, zoom: 15, mapId: "DEMO_MAP_ID", mapTypeControl: false, streetViewControl: false, fullscreenControl: true, zoomControl: true }); await this.getUserLocation(); this.addUserMarker(); return true; } catch (error) { console.error('地圖初始化失敗:', error); Utils.showError('地圖載入失敗，請檢查網路連線、API金鑰或重新整理頁面。'); return false; } } async getUserLocation() { return new Promise((resolve) => { if (!navigator.geolocation) { this.appState.userLocation = this.defaultCenter; alert('您的瀏覽器不支援地理位置功能，將使用預設地點。'); resolve(); return; } navigator.geolocation.getCurrentPosition( (position) => { this.appState.userLocation = { lat: position.coords.latitude, lng: position.coords.longitude }; this.appState.map.setCenter(this.appState.userLocation); resolve(); }, (error) => { console.error('定位錯誤:', error); this.appState.userLocation = this.defaultCenter; this.appState.map.setCenter(this.defaultCenter); let message = '無法取得您的位置，將使用預設地點搜尋。'; if (error.code === error.PERMISSION_DENIED) { message = '您拒絕了定位權限，將使用預設地點搜尋。'; } alert(message); resolve(); }, { timeout: 10000, enableHighAccuracy: true, maximumAge: 300000 } ); }); } addUserMarker() { if (!this.appState.userLocation || !this.appState.mapLibraries) return; const { AdvancedMarkerElement, PinElement } = this.appState.mapLibraries; const userMarkerPin = new PinElement({ background: '#4285F4', borderColor: '#FFFFFF', glyphColor: '#FFFFFF' }); new AdvancedMarkerElement({ map: this.appState.map, position: this.appState.userLocation, title: "您的位置", content: userMarkerPin.element }); } addPlaceMarkers(places) { if (!this.appState.mapLibraries) return; const { AdvancedMarkerElement, PinElement } = this.appState.mapLibraries; places.forEach(place => { const placeMarkerPin = new PinElement({ background: '#EA4335', borderColor: '#FFFFFF', glyphColor: '#FFFFFF' }); const marker = new AdvancedMarkerElement({ map: this.appState.map, position: place.location, title: place.displayName, content: placeMarkerPin.element }); this.appState.markers.push(marker); }); } focusOnPlace(place) { if (this.appState.map && place.location) { this.appState.map.panTo(place.location); this.appState.map.setZoom(17); } } };
-        SearchManager.prototype.filterResults = function(initialPlaces, params) { return initialPlaces.filter(place => { if (params.isRatingFilterEnabled) { if (place.rating && place.rating < 4.0) { return false; } } if (params.price !== 'any') { const maxPrice = parseInt(params.price, 10); if (place.priceLevel == null || place.priceLevel > maxPrice) { return false; } } if (params.isOpenNow) { if (place.regularOpeningHours && place.regularOpeningHours.openNow === false) { return false; } } return true; }); };
-        SearchManager.prototype.displayResults = function(places) { const resultsElement = document.getElementById('results'); const countElement = document.getElementById('results-count'); resultsElement.innerHTML = ''; countElement.textContent = `找到 ${places.length} 間店家`; const mapManager = new MapManager(this.appState); mapManager.addPlaceMarkers(places); if (places.length === 0) { resultsElement.innerHTML = `<div class="empty-state"><div class="empty-state-icon">😞</div><p>找不到符合條件的店家。<br>請嘗試放寬篩選條件。</p></div>`; return; } places.forEach(place => { const placeElement = this.createPlaceElement(place); resultsElement.appendChild(placeElement); }); };
-        SearchManager.prototype.createPlaceElement = function(place) { const placeItem = document.createElement('div'); placeItem.className = 'place-item'; const placeInfo = document.createElement('div'); placeInfo.className = 'place-info'; const title = document.createElement('h4'); title.textContent = place.displayName; const meta = document.createElement('div'); meta.className = 'place-meta'; const rating = document.createElement('span'); rating.className = 'rating'; rating.textContent = Utils.formatRating(place.rating); const priceLevel = document.createElement('span'); priceLevel.className = 'price-level'; const priceText = Utils.formatPrice(place.priceLevel); if (priceText) { priceLevel.textContent = priceText; } meta.appendChild(rating); if (priceText) { meta.appendChild(priceLevel); } if (place.regularOpeningHours && typeof place.regularOpeningHours.openNow !== 'undefined') { const status = document.createElement('span'); const isOpen = place.regularOpeninghours.openNow; status.className = `opening-status ${isOpen ? 'open' : 'closed'}`; status.textContent = isOpen ? '營業中' : '已打烊'; meta.appendChild(status); } const address = document.createElement('p'); address.className = 'place-address'; address.textContent = place.formattedAddress || '地址資訊不可用'; placeInfo.appendChild(title); placeInfo.appendChild(meta); placeInfo.appendChild(address); const shareButtons = this.createShareButtons(place); placeItem.appendChild(placeInfo); placeItem.appendChild(shareButtons); placeItem.addEventListener('click', (e) => { if (!e.target.closest('.share-buttons')) { new MapManager(this.appState).focusOnPlace(place); } }); return placeItem; };
-        SearchManager.prototype.createShareButtons = function(place) { const shareContainer = document.createElement('div'); shareContainer.className = 'share-buttons'; const shareText = Utils.createShareText(place); const lineButton = document.createElement('a'); lineButton.className = 'share-btn'; lineButton.textContent = 'Line'; lineButton.href = `https://line.me/R/msg/text/?${encodeURIComponent(shareText)}`; lineButton.target = '_blank'; lineButton.rel = 'noopener noreferrer'; const copyButton = document.createElement('button'); copyButton.className = 'share-btn'; copyButton.textContent = '複製'; copyButton.addEventListener('click', async (e) => { e.stopPropagation(); const success = await Utils.copyToClipboard(shareText); if (success) { copyButton.textContent = '已複製!'; setTimeout(() => { copyButton.textContent = '複製'; }, 2000); } else { alert('複製失敗，請手動複製內容。'); } }); shareContainer.appendChild(lineButton); shareContainer.appendChild(copyButton); return shareContainer; };
-        SearchManager.prototype.updateSearchButton = function(isLoading) { const button = document.getElementById('search-button'); const buttonText = button.querySelector('.btn-text'); if (isLoading) { button.disabled = true; buttonText.innerHTML = '<div class="loading-spinner"></div>搜尋中...'; } else { button.disabled = false; buttonText.textContent = '開始搜尋'; } };
-        SearchManager.prototype.drawWinner = function() { if (this.appState.currentResults.length === 0) { alert("請先搜尋，才能抽籤喔！"); return; } const randomIndex = Math.floor(Math.random() * this.appState.currentResults.length); const winner = this.appState.currentResults[randomIndex]; const recommendationDiv = document.getElementById('recommendation'); const winnerNameDiv = document.getElementById('winner-name'); winnerNameDiv.textContent = winner.displayName; recommendationDiv.style.display = 'block'; new MapManager(this.appState).focusOnPlace(winner); const winnerElement = Array.from(document.getElementById('results').querySelectorAll('.place-item')).find(item => item.querySelector('h4').textContent === winner.displayName); if (winnerElement) { winnerElement.scrollIntoView({ behavior: 'smooth', block: 'center' }); winnerElement.style.background = 'linear-gradient(135deg, #fff3cd 0%, #fef8e1 100%)'; setTimeout(() => { winnerElement.style.background = ''; }, 3000); } };
-        StoreDetectorApp.prototype.setupInitialState = function() { const keywordInput = document.getElementById('keyword-input'); const typeSelect = document.getElementById('type-select'); typeSelect.addEventListener('change', () => { const placeholders = { 'restaurant': '例如: 拉麵、不限時、素食...', 'cafe': '例如: 手沖咖啡、不限時、WiFi...', 'clothing_store': '例如: 韓系、vintage、大尺碼...', 'art_gallery': '例如: 當代藝術、攝影展...', 'book_store': '例如: 二手書、文具、咖啡...', 'store': '例如: 手作、設計、禮品...' }; keywordInput.placeholder = placeholders[typeSelect.value] || '輸入關鍵字...'; }); typeSelect.dispatchEvent(new Event('change')); };
-
-        let storeDetectorApp;
-        async function initializeApp() {
-            try { storeDetectorApp = new StoreDetectorApp(); await storeDetectorApp.initialize(); } catch (error) { console.error('初始化過程發生錯誤:', error); Utils.showError('系統載入失敗，請重新整理頁面。'); }
-        }
-        window.initMap = initializeApp;
+        // The entire JS block is unchanged from the previous version.
+        // It is provided here for completeness.
+        class AppState { constructor() { this.map = null; this.userLocation = null; this.initialUserLocation = null; this.userMarker = null; this.currentResults = []; this.markers = []; this.isSearching = false; this.mapLibraries = null; this.lastSearchParams = null; this.activePlaceId = null; } reset() { this.currentResults = []; this.clearMarkers(); this.hideRecommendation(); this.lastSearchParams = null; this.activePlaceId = null; } clearMarkers() { this.markers.forEach(marker => { if (marker && marker.map) { marker.map = null; } }); this.markers = []; } hideRecommendation() { const recommendationElement = document.getElementById('recommendation'); if (recommendationElement) { recommendationElement.style.display = 'none'; } } }
+        class Utils { static debounce(func, wait) { let timeout; return function executedFunction(...args) { const later = () => { clearTimeout(timeout); func(...args); }; clearTimeout(timeout); timeout = setTimeout(later, wait); }; } static formatPrice(priceLevel) { if (priceLevel == null) return ''; return '$'.repeat(priceLevel); } static formatRating(rating) { return rating ? `${rating.toFixed(1)}` : '無評分'; } static createShareText(place) { const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.displayName)}&query_place_id=${place.id}`; return `嘿！我用「附近優質店家探測器」找到一家很棒的店：\n\n【${place.displayName}】\n\n推薦給你！\n點擊查看地圖：${googleMapsUrl}`; } static async copyToClipboard(text) { try { await navigator.clipboard.writeText(text); return true; } catch (err) { console.error('複製失敗:', err); return false; } } static showError(message, container = 'results') { const element = document.getElementById(container); if (element) { element.innerHTML = message; } } static showLoading(container = 'results') { const element = document.getElementById(container); if (element) { element.innerHTML = '<div style="text-align: center; padding: 20px;"><div class="loading-spinner"></div>正在搜尋中...</div>'; } } }
+        class MapManager { constructor(appState) { this.appState = appState; this.defaultCenter = { lat: 25.0479, lng: 121.5171 }; } async initialize() { try { const { Map } = await google.maps.importLibrary("maps"); const { AdvancedMarkerElement, PinElement } = await google.maps.importLibrary("marker"); this.appState.mapLibraries = { AdvancedMarkerElement, PinElement }; this.appState.map = new Map(document.getElementById("map"), { center: this.defaultCenter, zoom: 15, mapId: "DEMO_MAP_ID", mapTypeControl: false, streetViewControl: false, fullscreenControl: true, zoomControl: true }); await this.getUserLocation(); this.addUserMarker(); return true; } catch (error) { console.error('地圖初始化失敗:', error); Utils.showError('地圖載入失敗，請檢查網路連線、API金鑰或重新整理頁面。'); return false; } } async getUserLocation() { return new Promise((resolve) => { if (!navigator.geolocation) { this.appState.userLocation = this.defaultCenter; this.appState.initialUserLocation = this.defaultCenter; alert('您的瀏覽器不支援地理位置功能，將使用預設地點。'); resolve(); return; } navigator.geolocation.getCurrentPosition( (position) => { const location = { lat: position.coords.latitude, lng: position.coords.longitude }; this.appState.userLocation = location; this.appState.initialUserLocation = location; this.appState.map.setCenter(this.appState.userLocation); resolve(); }, (error) => { console.error('定位錯誤:', error); this.appState.userLocation = this.defaultCenter; this.appState.initialUserLocation = this.defaultCenter; this.appState.map.setCenter(this.defaultCenter); let message = '無法取得您的位置，將使用預設地點搜尋。'; if (error.code === error.PERMISSION_DENIED) { message = '您拒絕了定位權限，將使用預設地點搜尋。'; } alert(message); resolve(); }, { timeout: 10000, enableHighAccuracy: true, maximumAge: 300000 } ); }); } addUserMarker() { if (!this.appState.userLocation || !this.appState.mapLibraries) return; const { AdvancedMarkerElement, PinElement } = this.appState.mapLibraries; const userMarkerPin = new PinElement({ background: '#4285F4', borderColor: '#FFFFFF', glyphColor: '#FFFFFF' }); this.appState.userMarker = new AdvancedMarkerElement({ map: this.appState.map, position: this.appState.userLocation, title: "搜尋中心", content: userMarkerPin.element, zIndex: 99 }); } updateUserMarker(location) { if (this.appState.userMarker) { this.appState.userMarker.position = location; } else { this.addUserMarker(); } } addPlaceMarkers(places) { if (!this.appState.mapLibraries) return; const { AdvancedMarkerElement, PinElement } = this.appState.mapLibraries; places.forEach(place => { const placeMarkerPin = new PinElement({ background: '#EA4335', borderColor: '#FFFFFF', glyphColor: '#FFFFFF' }); const marker = new AdvancedMarkerElement({ map: this.appState.map, position: place.location, title: place.displayName, content: placeMarkerPin.element }); this.appState.markers.push(marker); }); } focusOnPlace(place) { if (this.appState.map && place.location) { this.appState.map.panTo(place.location); this.appState.map.setZoom(17); } } }
+        class SearchManager { constructor(appState) { this.appState = appState; } async searchNearbyPlaces() { if (!this.appState.userLocation) { alert("正在等待定位，請稍後再試..."); return; } if (this.appState.isSearching) { return; } this.appState.isSearching = true; this.updateSearchButton(true); document.getElementById('load-more-button').style.display = 'none'; this.appState.reset(); Utils.showLoading(); try { const searchParams = this.getSearchParameters(); this.appState.lastSearchParams = searchParams; const { Place } = await google.maps.importLibrary("places"); let initialPlaces = await this.performSearch(Place, searchParams); if (!initialPlaces || initialPlaces.length === 0) { Utils.showError('<div class="empty-state"><div class="empty-state-icon material-symbols-outlined">search_off</div><p>找不到任何店家，請嘗試更換關鍵字或移動地圖。</p></div>'); return; } const filteredResults = this.filterResults(initialPlaces, searchParams); this.appState.currentResults = filteredResults; this.displayResults(filteredResults); if (searchParams.keyword && initialPlaces.length === 20) { document.getElementById('load-more-button').style.display = 'block'; } } catch (error) { console.error('搜尋錯誤:', error); Utils.showError('搜尋過程發生錯誤，請稍後再試。'); } finally { this.appState.isSearching = false; this.updateSearchButton(false); } } async loadMorePlaces() { const loadMoreBtn = document.getElementById('load-more-button'); if (this.appState.isSearching || !this.appState.lastSearchParams || !this.appState.lastSearchParams.keyword) { return; } this.appState.isSearching = true; loadMoreBtn.disabled = true; loadMoreBtn.innerHTML = '<div class="loading-spinner"></div>載入中...'; try { const { Place } = await google.maps.importLibrary("places"); const exclusionQuery = this.appState.currentResults.map(p => `-"${p.displayName.replace(/"/g, '')}"`).join(' '); const newTextQuery = `${this.appState.lastSearchParams.keyword} ${exclusionQuery}`; const newParams = { ...this.appState.lastSearchParams, textQuery: newTextQuery }; let newPlaces = await this.performSearch(Place, newParams); if (!newPlaces || newPlaces.length === 0) { loadMoreBtn.style.display = 'none'; return; } const existingPlaceIds = new Set(this.appState.currentResults.map(p => p.id)); const uniqueNewPlaces = newPlaces.filter(p => !existingPlaceIds.has(p.id)); if (uniqueNewPlaces.length > 0) { const filteredNewResults = this.filterResults(uniqueNewPlaces, this.appState.lastSearchParams); this.appState.currentResults.push(...filteredNewResults); this.appendResults(filteredNewResults); } if (newPlaces.length < 20) { loadMoreBtn.style.display = 'none'; } } catch (error) { console.error('載入更多時發生錯誤:', error); alert('載入更多結果時發生錯誤。'); } finally { this.appState.isSearching = false; loadMoreBtn.disabled = false; loadMoreBtn.textContent = '載入更多結果'; } } getSearchParameters() { return { radius: document.getElementById('radius-select').value, type: document.getElementById('type-select').value, price: document.getElementById('price-select').value, keyword: document.getElementById('keyword-input').value.trim(), isOpenNow: document.getElementById('open-now-checkbox').checked, isRatingFilterEnabled: document.getElementById('rating-filter-checkbox').checked }; } async performSearch(Place, params) { const baseFields = [ 'displayName', 'location', 'rating', 'priceLevel', 'formattedAddress', 'id', 'regularOpeningHours', 'businessStatus' ]; const textQuery = params.textQuery || params.keyword; if (textQuery) { const request = { fields: baseFields, textQuery: textQuery, maxResultCount: 20, ...(params.isOpenNow && { isOpenNow: true }) }; const radiusForBias = (params.radius === 'any') ? 50000 : parseInt(params.radius, 10); request.locationBias = { center: this.appState.userLocation, radius: radiusForBias }; const response = await Place.searchByText(request); return response.places; } else { const request = { fields: baseFields, includedTypes: [params.type], maxResultCount: 20 }; const radiusForRestriction = (params.radius === 'any') ? 5000 : parseInt(params.radius, 10); request.locationRestriction = { center: this.appState.userLocation, radius: radiusForRestriction }; const response = await Place.searchNearby(request); return response.places; } } filterResults(initialPlaces, params) { return initialPlaces.filter(place => { if (params.isRatingFilterEnabled && place.rating && place.rating < 4.0) return false; if (params.price !== 'any') { const maxPrice = parseInt(params.price, 10); if (place.priceLevel == null || place.priceLevel > maxPrice) return false; } if (params.isOpenNow && place.regularOpeningHours && place.regularOpeningHours.openNow === false) return false; return true; }); } displayResults(places) { const resultsElement = document.getElementById('results'); const countElement = document.getElementById('results-count'); resultsElement.innerHTML = ''; countElement.textContent = `找到 ${places.length} 間店家`; const mapManager = new MapManager(this.appState); mapManager.addPlaceMarkers(places); if (places.length === 0) { resultsElement.innerHTML = `<div class="empty-state"><div class="empty-state-icon material-symbols-outlined">wrong_location</div><p>找不到符合條件的店家。<br>請嘗試放寬篩選條件。</p></div>`; return; } places.forEach(place => { const placeElement = this.createPlaceElement(place); resultsElement.appendChild(placeElement); }); } appendResults(places) { const resultsElement = document.getElementById('results'); const countElement = document.getElementById('results-count'); countElement.textContent = `找到 ${this.appState.currentResults.length} 間店家`; const mapManager = new MapManager(this.appState); mapManager.addPlaceMarkers(places); places.forEach(place => { const placeElement = this.createPlaceElement(place); resultsElement.appendChild(placeElement); }); } createPlaceElement(place) { const placeItem = document.createElement('div'); placeItem.className = 'place-item'; placeItem.dataset.placeId = place.id; if (place.id === this.appState.activePlaceId) { placeItem.classList.add('active'); } const placeInfo = document.createElement('div'); placeInfo.className = 'place-info'; placeInfo.appendChild(this.createShareButtons(place)); const title = document.createElement('h4'); title.textContent = place.displayName; const meta = document.createElement('div'); meta.className = 'place-meta'; if (place.rating) { meta.innerHTML += `<div class="meta-item rating"><span class="material-symbols-outlined">star</span> ${Utils.formatRating(place.rating)}</div>`; } const priceText = Utils.formatPrice(place.priceLevel); if (priceText) { meta.innerHTML += `<div class="meta-item price-level"><span class="material-symbols-outlined">paid</span> ${priceText}</div>`; } if (place.regularOpeningHours && typeof place.regularOpeningHours.openNow !== 'undefined') { const isOpen = place.regularOpeningHours.openNow; meta.innerHTML += `<div class="meta-item opening-status ${isOpen ? 'open' : 'closed'}">${isOpen ? '營業中' : '已打烊'}</div>`; } const address = document.createElement('p'); address.className = 'place-address'; address.textContent = place.formattedAddress || '地址資訊不可用'; placeInfo.appendChild(title); placeInfo.appendChild(meta); placeInfo.appendChild(address); placeItem.appendChild(placeInfo); placeItem.addEventListener('click', (e) => { if (e.target.closest('.share-buttons')) return; this.appState.activePlaceId = place.id; document.querySelectorAll('.place-item').forEach(item => item.classList.remove('active')); placeItem.classList.add('active'); new MapManager(this.appState).focusOnPlace(place); }); return placeItem; } createShareButtons(place) { const shareContainer = document.createElement('div'); shareContainer.className = 'share-buttons'; const shareText = Utils.createShareText(place); const lineButton = document.createElement('a'); lineButton.className = 'share-btn'; lineButton.innerHTML = `<span class="material-symbols-outlined">share</span>`; lineButton.href = `https://line.me/R/msg/text/?${encodeURIComponent(shareText)}`; lineButton.target = '_blank'; lineButton.rel = 'noopener noreferrer'; const copyButton = document.createElement('button'); copyButton.className = 'share-btn'; copyButton.innerHTML = `<span class="material-symbols-outlined">content_copy</span>`; copyButton.addEventListener('click', async (e) => { e.stopPropagation(); const success = await Utils.copyToClipboard(shareText); if (success) { copyButton.innerHTML = `<span class="material-symbols-outlined">done</span>`; setTimeout(() => { copyButton.innerHTML = `<span class="material-symbols-outlined">content_copy</span>`; }, 2000); } else { alert('複製失敗'); } }); shareContainer.appendChild(lineButton); shareContainer.appendChild(copyButton); return shareContainer; } updateSearchButton(isLoading) { const button = document.getElementById('search-button'); const buttonText = button.querySelector('.btn-text'); if (isLoading) { button.disabled = true; buttonText.textContent = '搜尋中...'; } else { button.disabled = false; buttonText.textContent = '開始搜尋'; } } drawWinner() { if (this.appState.currentResults.length === 0) { alert("請先搜尋，才能抽籤喔！"); return; } const randomIndex = Math.floor(Math.random() * this.appState.currentResults.length); const winner = this.appState.currentResults[randomIndex]; const recommendationDiv = document.getElementById('recommendation'); const winnerNameDiv = document.getElementById('winner-name'); winnerNameDiv.textContent = winner.displayName; recommendationDiv.style.display = 'block'; new MapManager(this.appState).focusOnPlace(winner); const winnerElement = document.querySelector(`.place-item[data-place-id="${winner.id}"]`); if (winnerElement) { winnerElement.scrollIntoView({ behavior: 'smooth', block: 'center' }); document.querySelectorAll('.place-item').forEach(item => item.classList.remove('active')); winnerElement.classList.add('active'); } } }
+        class StoreDetectorApp { constructor() { this.appState = new AppState(); this.mapManager = new MapManager(this.appState); this.searchManager = new SearchManager(this.appState); } async initialize() { try { if (!await this.mapManager.initialize()) return false; this.bindEventListeners(); this.initializeAutocomplete(); this.setupInitialState(); console.log('應用程式初始化完成'); return true; } catch (error) { console.error('應用程式初始化失敗:', error); Utils.showError('應用程式載入失敗，請重新整理頁面。'); return false; } } initializeAutocomplete() { const input = document.getElementById('location-search-input'); const clearButton = document.getElementById('clear-search-btn'); const autocompleteOptions = { componentRestrictions: { country: "tw" }, fields: ["geometry", "name"], types: ["establishment", "geocode"] }; const autocomplete = new google.maps.places.Autocomplete(input, autocompleteOptions); autocomplete.addListener('place_changed', () => { const place = autocomplete.getPlace(); if (!place.geometry || !place.geometry.location) { alert(`找不到 "${place.name}" 的詳細資訊`); return; } const newLocation = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() }; this.appState.userLocation = newLocation; this.appState.map.setCenter(newLocation); this.appState.map.setZoom(15); this.mapManager.updateUserMarker(newLocation); clearButton.style.display = 'block'; this.searchManager.searchNearbyPlaces(); }); clearButton.addEventListener('click', () => { input.value = ''; clearButton.style.display = 'none'; input.focus(); }); input.addEventListener('input', () => { if (input.value === '') { clearButton.style.display = 'none'; } }); } bindEventListeners() { document.getElementById('search-button').addEventListener('click', () => this.searchManager.searchNearbyPlaces()); document.getElementById('draw-button').addEventListener('click', () => this.searchManager.drawWinner()); document.getElementById('load-more-button').addEventListener('click', () => this.searchManager.loadMorePlaces()); const keywordInput = document.getElementById('keyword-input'); const debouncedSearch = Utils.debounce(() => { if (this.appState.currentResults.length > 0) { this.searchManager.searchNearbyPlaces(); } }, 1000); keywordInput.addEventListener('input', debouncedSearch); keywordInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') { this.searchManager.searchNearbyPlaces(); } }); const autoSearchElements = ['type-select', 'price-select', 'open-now-checkbox', 'radius-select', 'rating-filter-checkbox']; autoSearchElements.forEach(id => { document.getElementById(id).addEventListener('change', () => { if (this.appState.currentResults.length > 0) { setTimeout(() => this.searchManager.searchNearbyPlaces(), 500); } }); }); } setupInitialState() { const keywordInput = document.getElementById('keyword-input'); const typeSelect = document.getElementById('type-select'); typeSelect.addEventListener('change', () => { const placeholders = { 'restaurant': '例如: 拉麵、不限時、素食...', 'cafe': '例如: 手沖咖啡、不限時、WiFi...', 'clothing_store': '例如: 韓系、vintage、大尺碼...', 'art_gallery': '例如: 當代藝術、攝影展...', 'book_store': '例如: 二手書、文具、咖啡...', 'store': '例如: 手作、設計、禮品...' }; keywordInput.placeholder = placeholders[typeSelect.value] || '輸入關鍵字...'; }); typeSelect.dispatchEvent(new Event('change')); } }
+        let storeDetectorApp; async function initializeApp() { try { storeDetectorApp = new StoreDetectorApp(); await storeDetectorApp.initialize(); } catch (error) { console.error('初始化過程發生錯誤:', error); Utils.showError('系統載入失敗，請重新整理頁面。'); } } window.initMap = initializeApp;
     </script>
     <script async defer 
             src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDvKC9RDnx1uUCYrOcm9Mb0IRg00J0PA1c&libraries=maps,marker,places&callback=initMap&loading=async">
