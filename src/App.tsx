@@ -264,7 +264,7 @@ export default function App() {
     <div className="flex flex-col h-screen bg-gray-50 text-gray-900 font-sans overflow-hidden">
       <header className="bg-white px-4 h-14 flex items-center border-b border-gray-200 shrink-0 z-10 shadow-sm">
         <Compass className="w-6 h-6 text-blue-600 mr-2" />
-        <h1 className="text-lg font-bold text-gray-800">附近優質店家探測器 V4.3</h1>
+        <h1 className="text-lg font-bold text-gray-800">附近優質店家探測器 V5.0</h1>
       </header>
 
       <main className="flex flex-col md:flex-row flex-1 overflow-hidden relative">
