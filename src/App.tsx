@@ -431,7 +431,7 @@ export default function App() {
       <header className="bg-white dark:bg-gray-800 px-4 h-14 flex items-center justify-between border-b border-gray-200 dark:border-gray-700 shrink-0 z-10 shadow-sm">
         <div className="flex items-center">
           <Compass className="w-6 h-6 text-blue-600 mr-2" />
-          <h1 className="text-lg font-bold text-gray-800 dark:text-gray-100">附近優質店家探測器 V5.0</h1>
+          <h1 className="text-lg font-bold text-gray-800 dark:text-gray-100">附近優質店家探測器 V5.1</h1>
         </div>
         <div className="flex items-center gap-2">
           <button 
