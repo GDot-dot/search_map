@@ -6,7 +6,8 @@ import {defineConfig, loadEnv} from 'vite';
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   return {
-    base: '/search_map/', // 正確的 GitHub Pages 路徑
+    // 自動判斷路徑：正式環境用 /search_map/，開發環境用 /
+    base: mode === 'production' ? '/search_map/' : '/', 
     plugins: [react(), tailwindcss()],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
