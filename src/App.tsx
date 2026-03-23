@@ -267,31 +267,6 @@ export default function App() {
     });
   };
 
-  const calculateDistances = async (destinations: any[]) => {
-    if (!userLocation || destinations.length === 0 || !window.google) return;
-    
-    try {
-      const service = new window.google.maps.DistanceMatrixService();
-      const response = await service.getDistanceMatrix({
-        origins: [userLocation],
-        destinations: destinations.map(p => p.location),
-        travelMode: window.google.maps.TravelMode.WALKING,
-      });
-
-      if (response.rows[0]) {
-        const newDistances: Record<string, string> = {};
-        response.rows[0].elements.forEach((element: any, index: number) => {
-          if (element.status === "OK") {
-            newDistances[destinations[index].id] = element.duration.text;
-          }
-        });
-        setDistances(prev => ({ ...prev, ...newDistances }));
-      }
-    } catch (error) {
-      console.error("Distance calculation failed", error);
-    }
-  };
-
   const performSearch = async (isLoadMore = false) => {
     if (!userLocation || !map) return;
     if (isLoadMore) setIsLoadingMore(true);
@@ -302,8 +277,18 @@ export default function App() {
     
     try {
       const { Place } = await window.google.maps.importLibrary("places");
-      const baseFields = ['displayName', 'location', 'rating', 'priceLevel', 'formattedAddress', 'id', 'regularOpeningHours', 'businessStatus', 'userRatingCount'];
-      
+      const baseFields = [
+        'displayName', 
+        'location', 
+        'rating', 
+        'priceLevel', 
+        'formattedAddress', 
+        'id', 
+        'regularOpeningHours', 
+        'businessStatus', 
+        'userRatingCount'
+      ];
+
       let results = [];
       let currentHasNextPage = false;
       
@@ -319,7 +304,6 @@ export default function App() {
           textQuery: textQuery,
           maxResultCount: 20,
         };
-        if (searchParams.openNow) request.isOpenNow = true;
         const radius = searchParams.radius === 'any' ? 50000 : parseInt(searchParams.radius);
         request.locationBias = { center: userLocation, radius };
         
@@ -339,6 +323,35 @@ export default function App() {
         results = response.places || [];
       }
 
+      // Manual distance calculation (straight line estimate)
+      const newDistances: Record<string, string> = {};
+      results.forEach((p: any) => {
+        if (p.location && userLocation) {
+          const lat1 = userLocation.lat;
+          const lon1 = userLocation.lng;
+          const lat2 = p.location.lat;
+          const lon2 = p.location.lng;
+          
+          // Haversine formula
+          const R = 6371e3; // metres
+          const φ1 = lat1 * Math.PI/180;
+          const φ2 = lat2 * Math.PI/180;
+          const Δφ = (lat2-lat1) * Math.PI/180;
+          const Δλ = (lon2-lon1) * Math.PI/180;
+
+          const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                  Math.cos(φ1) * Math.cos(φ2) *
+                  Math.sin(Δλ/2) * Math.sin(Δλ/2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+          const distance = R * c; // in metres
+          
+          // Estimate walking time (approx 80m per minute)
+          const minutes = Math.ceil((distance * 1.3) / 80); // 1.3 factor for actual walking path vs straight line
+          newDistances[p.id] = `${minutes} 分鐘`;
+        }
+      });
+      setDistances(prev => ({ ...prev, ...newDistances }));
+
       const existingIds = isLoadMore ? new Set(places.map(p => p.id)) : new Set();
       const uniqueNew = results.filter((p: any) => !existingIds.has(p.id));
 
@@ -347,7 +360,11 @@ export default function App() {
         if (searchParams.price !== 'any') {
           if (p.priceLevel == null || p.priceLevel > parseInt(searchParams.price)) return false;
         }
-        if (searchParams.openNow && p.regularOpeningHours && p.regularOpeningHours.openNow === false) return false;
+        if (searchParams.openNow) {
+          // If openNow is checked, only show if we are sure it's open
+          const isOpen = checkIsOpenNow(p);
+          if (isOpen === false || isOpen === null) return false;
+        }
         return true;
       });
 
@@ -356,10 +373,6 @@ export default function App() {
       updateMarkers(combined);
       setHasNextPage(currentHasNextPage);
       
-      if (filtered.length > 0) {
-        calculateDistances(filtered);
-      }
-
       if (!isLoadMore && window.innerWidth < 768) {
         setShowFilters(false);
       }
@@ -384,15 +397,100 @@ export default function App() {
     });
   };
 
-  const getOpeningStatus = (place: any) => {
-    if (!place.regularOpeningHours) return null;
-    const isOpen = place.regularOpeningHours.openNow;
+  const checkIsOpenNow = (place: any) => {
+    if (place.businessStatus === 'CLOSED_PERMANENTLY' || place.businessStatus === 'CLOSED_TEMPORARILY') {
+      return false;
+    }
     
-    // Simple countdown logic: if it's open, we'd need more detailed periods to show countdown.
-    // For now, we'll show the status and a generic message.
+    // Some APIs return a direct isOpenNow boolean, check that first
+    if (place.regularOpeningHours && typeof place.regularOpeningHours.isOpenNow === 'boolean') {
+      return place.regularOpeningHours.isOpenNow;
+    }
+    if (place.currentOpeningHours && typeof place.currentOpeningHours.isOpenNow === 'boolean') {
+      return place.currentOpeningHours.isOpenNow;
+    }
+
+    // Otherwise calculate manually from periods
+    const hours = place.currentOpeningHours || place.regularOpeningHours;
+    if (!hours || !hours.periods) return null; // Unknown
+
+    const is24Hours = hours.periods.some((p: any) => 
+      p.open?.day === 0 && p.open?.hour === 0 && p.open?.minute === 0 && !p.close
+    );
+    if (is24Hours) return true;
+
+    const now = new Date();
+    const currentDay = now.getDay();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    
+    // Convert to minutes from start of week (Sunday 00:00)
+    const currentMinutes = currentDay * 24 * 60 + currentHour * 60 + currentMinute;
+
+    for (const period of hours.periods) {
+      if (!period.open) continue;
+      
+      const openMinutes = period.open.day * 24 * 60 + period.open.hour * 60 + period.open.minute;
+      
+      if (!period.close) {
+        // If there's an open but no close, assume it's open 24 hours from that day
+        if (currentMinutes >= openMinutes) return true;
+        continue;
+      }
+      
+      let closeMinutes = period.close.day * 24 * 60 + period.close.hour * 60 + period.close.minute;
+      
+      // If close time is before open time, it means it wraps around the week (e.g., open Saturday, close Sunday)
+      if (closeMinutes < openMinutes) {
+        closeMinutes += 7 * 24 * 60;
+      }
+      
+      // We also need to check if current time wrapped around
+      let checkMinutes = currentMinutes;
+      if (checkMinutes < openMinutes && closeMinutes > 7 * 24 * 60) {
+        checkMinutes += 7 * 24 * 60;
+      }
+      
+      if (checkMinutes >= openMinutes && checkMinutes < closeMinutes) {
+        return true;
+      }
+    }
+    
+    return false;
+  };
+
+  const getOpeningStatus = (place: any) => {
+    // Check business status first
+    if (place.businessStatus === 'CLOSED_TEMPORARILY') {
+      return {
+        isOpen: false,
+        text: '暫時關閉',
+        color: 'text-orange-600 bg-orange-50 dark:bg-orange-900/20 dark:text-orange-400'
+      };
+    }
+    if (place.businessStatus === 'CLOSED_PERMANENTLY') {
+      return {
+        isOpen: false,
+        text: '永久停業',
+        color: 'text-gray-600 bg-gray-50 dark:bg-gray-900/20 dark:text-gray-400'
+      };
+    }
+
+    // Use currentOpeningHours if available, fallback to regularOpeningHours
+    const hours = place.currentOpeningHours || place.regularOpeningHours;
+    if (!hours) return null;
+    
+    const isOpen = checkIsOpenNow(place);
+    if (isOpen === null) return null;
+    
+    // Check if it's 24 hours
+    const is24Hours = hours.periods?.some((p: any) => 
+      p.open?.day === 0 && p.open?.hour === 0 && p.open?.minute === 0 && !p.close
+    );
+
     return {
       isOpen,
-      text: isOpen ? '營業中' : '已打烊',
+      text: is24Hours ? '24 小時營業' : (isOpen ? '營業中' : '已打烊'),
       color: isOpen ? 'text-green-600 bg-green-50 dark:bg-green-900/20 dark:text-green-400' : 'text-red-600 bg-red-50 dark:bg-red-900/20 dark:text-red-400'
     };
   };
@@ -431,7 +529,7 @@ export default function App() {
       <header className="bg-white dark:bg-gray-800 px-4 h-14 flex items-center justify-between border-b border-gray-200 dark:border-gray-700 shrink-0 z-10 shadow-sm">
         <div className="flex items-center">
           <Compass className="w-6 h-6 text-blue-600 mr-2" />
-          <h1 className="text-lg font-bold text-gray-800 dark:text-gray-100">附近優質店家探測器 V5.1</h1>
+          <h1 className="text-lg font-bold text-gray-800 dark:text-gray-100">附近優質店家探測器 V5.0</h1>
         </div>
         <div className="flex items-center gap-2">
           <button 
@@ -462,6 +560,28 @@ export default function App() {
             </button>
           </div>
 
+          {/* Search Button - Always visible on mobile when in search mode */}
+          {viewMode === 'search' && (
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 md:hidden flex gap-2 shrink-0">
+              <button 
+                onClick={() => performSearch(false)}
+                disabled={isSearching || !userLocation}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-70 disabled:cursor-not-allowed shadow-sm"
+              >
+                {isSearching ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Search className="w-4 h-4" />}
+                {isSearching ? '搜尋中...' : '開始搜尋'}
+              </button>
+              <button 
+                onClick={drawWinner}
+                disabled={places.length === 0}
+                className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                title="天選之店！"
+              >
+                <Dices className="w-5 h-5" />
+              </button>
+            </div>
+          )}
+
           <div className="md:hidden flex items-center justify-between px-4 py-2 bg-gray-100 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 shrink-0">
             <span className="font-semibold text-sm text-gray-600 dark:text-gray-400">
               {viewMode === 'search' ? (places.length > 0 ? `找到 ${places.length} 間店家` : '設定搜尋條件') : `收藏了 ${favorites.length} 間店家`}
@@ -478,7 +598,7 @@ export default function App() {
           </div>
 
           {viewMode === 'search' && (
-            <div className={`flex-col shrink-0 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 transition-all duration-300 overflow-y-auto max-h-[50vh] md:max-h-none ${showFilters ? 'flex' : 'hidden md:flex'}`}>
+            <div className={`flex-col shrink-0 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 transition-all duration-300 overflow-y-auto max-h-[60vh] md:max-h-none ${showFilters ? 'flex' : 'hidden md:flex'}`}>
               <div className="p-4 space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">搜尋地點</label>
@@ -578,31 +698,36 @@ export default function App() {
                   </label>
                 </div>
 
-                <div className="flex gap-2 pt-2">
-                  <button 
-                    onClick={() => performSearch(false)}
-                    disabled={isSearching || !userLocation}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-70 disabled:cursor-not-allowed shadow-sm"
-                  >
-                    {isSearching ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Search className="w-4 h-4" />}
-                    {isSearching ? '搜尋中...' : '開始搜尋'}
-                  </button>
-                  <button 
-                    onClick={drawWinner}
-                    disabled={places.length === 0}
-                    className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                    title="天選之店！"
-                  >
-                    <Dices className="w-5 h-5" />
-                  </button>
-                </div>
-
                 {winner && (
-                  <div className="mt-4 p-4 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-center">
+                  <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-center">
                     <div className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">🎉 天選之店</div>
                     <div className="text-lg font-bold text-gray-900 dark:text-gray-100">{winner.displayName}</div>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Search Button - Desktop version inside filters */}
+          {viewMode === 'search' && (
+            <div className="hidden md:block p-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => performSearch(false)}
+                  disabled={isSearching || !userLocation}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-70 disabled:cursor-not-allowed shadow-sm"
+                >
+                  {isSearching ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Search className="w-4 h-4" />}
+                  {isSearching ? '搜尋中...' : '開始搜尋'}
+                </button>
+                <button 
+                  onClick={drawWinner}
+                  disabled={places.length === 0}
+                  className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                  title="天選之店！"
+                >
+                  <Dices className="w-5 h-5" />
+                </button>
               </div>
             </div>
           )}
