@@ -14,6 +14,7 @@ interface SearchParams {
   price: string;
   openNow: boolean;
   ratingFilter: boolean;
+  hiddenGem: boolean;
 }
 
 const DARK_MAP_STYLE = [
@@ -97,21 +98,25 @@ const DARK_MAP_STYLE = [
   },
 ];
 
-const getLatLng = (loc: any) => ({
-  lat: typeof loc.lat === 'function' ? loc.lat() : loc.lat,
-  lng: typeof loc.lng === 'function' ? loc.lng() : loc.lng
-});
+const getLatLng = (loc: any) => {
+  if (!loc) return { lat: 0, lng: 0 };
+  const latNum = typeof loc.lat === 'function' ? loc.lat() : loc.lat;
+  const lngNum = typeof loc.lng === 'function' ? loc.lng() : loc.lng;
+  return { lat: Number(latNum), lng: Number(lngNum) };
+};
 
 const parsePriceLevel = (level: any): number => {
+  if (level == null) return -1;
   if (typeof level === 'number') return level;
-  switch (level) {
-    case 'PRICE_LEVEL_FREE': return 0;
-    case 'PRICE_LEVEL_INEXPENSIVE': return 1;
-    case 'PRICE_LEVEL_MODERATE': return 2;
-    case 'PRICE_LEVEL_EXPENSIVE': return 3;
-    case 'PRICE_LEVEL_VERY_EXPENSIVE': return 4;
-    default: return 0;
+  if (typeof level === 'string') {
+    const l = level.toUpperCase();
+    if (l === 'PRICE_LEVEL_FREE' || l === 'FREE' || l === '0') return 0;
+    if (l === 'PRICE_LEVEL_INEXPENSIVE' || l === 'INEXPENSIVE' || l === '1') return 1;
+    if (l === 'PRICE_LEVEL_MODERATE' || l === 'MODERATE' || l === '2') return 2;
+    if (l === 'PRICE_LEVEL_EXPENSIVE' || l === 'EXPENSIVE' || l === '3') return 3;
+    if (l === 'PRICE_LEVEL_VERY_EXPENSIVE' || l === 'VERY_EXPENSIVE' || l === '4') return 4;
   }
+  return -1;
 };
 
 export default function App() {
@@ -137,7 +142,8 @@ export default function App() {
     radius: 'any',
     price: 'any',
     openNow: false,
-    ratingFilter: true
+    ratingFilter: true,
+    hiddenGem: false,
   });
   const [winner, setWinner] = useState<any>(null);
   const [showFilters, setShowFilters] = useState(true);
@@ -302,6 +308,7 @@ export default function App() {
         'formattedAddress', 
         'id', 
         'regularOpeningHours', 
+        'currentOpeningHours',
         'businessStatus', 
         'userRatingCount'
       ];
@@ -322,7 +329,13 @@ export default function App() {
           maxResultCount: 20,
         };
         const radius = searchParams.radius === 'any' ? 50000 : parseInt(searchParams.radius);
-        request.locationBias = { center: userLocation, radius };
+        
+        if (searchParams.hiddenGem) {
+          request.rankPreference = 'DISTANCE';
+          request.locationRestriction = { center: userLocation, radius: searchParams.radius === 'any' ? 5000 : radius };
+        } else {
+          request.locationBias = { center: userLocation, radius };
+        }
         
         const response = await Place.searchByText(request);
         results = response.places || [];
@@ -335,6 +348,9 @@ export default function App() {
         };
         const radius = searchParams.radius === 'any' ? 5000 : parseInt(searchParams.radius);
         request.locationRestriction = { center: userLocation, radius };
+        if (searchParams.hiddenGem) {
+          request.rankPreference = 'DISTANCE';
+        }
         
         const response = await Place.searchNearby(request);
         results = response.places || [];
@@ -407,9 +423,12 @@ export default function App() {
 
       const filtered = uniqueNew.filter((p: any) => {
         if (searchParams.ratingFilter && p.rating && p.rating < 4.0) return false;
+        if (searchParams.hiddenGem && p.userRatingCount && p.userRatingCount > 1000) return false;
         if (searchParams.price !== 'any') {
           const pLevel = parsePriceLevel(p.priceLevel);
-          if (pLevel == null || pLevel === 0 || pLevel > parseInt(searchParams.price)) return false;
+          // Only filter out if we strictly know it exceeds the requested price level.
+          // Keep -1 (unknowns) or matching levels. Avoid eliminating places just because price is unlisted.
+          if (pLevel !== -1 && pLevel > parseInt(searchParams.price)) return false;
         }
         if (searchParams.openNow) {
           // If openNow is checked, only show if we are sure it's open
@@ -453,20 +472,35 @@ export default function App() {
       return false;
     }
     
-    // Some APIs return a direct isOpenNow boolean, check that first
-    if (place.regularOpeningHours && typeof place.regularOpeningHours.isOpenNow === 'boolean') {
-      return place.regularOpeningHours.isOpenNow;
-    }
-    if (place.currentOpeningHours && typeof place.currentOpeningHours.isOpenNow === 'boolean') {
-      return place.currentOpeningHours.isOpenNow;
+    // Check if the place object has a native isOpen()
+    if (typeof place.isOpen === 'function') {
+      try {
+        const nativeIsOpen = place.isOpen();
+        if (typeof nativeIsOpen === 'boolean') return nativeIsOpen;
+      } catch(e) {}
     }
 
     // Otherwise calculate manually from periods
     const hours = place.currentOpeningHours || place.regularOpeningHours;
-    if (!hours || !hours.periods) return null; // Unknown
+    if (!hours) return null; // Unknown
+
+    // Some APIs return a direct isOpenNow boolean, check that first
+    if (typeof hours.isOpen === 'function') {
+      try {
+        const hIsOpen = hours.isOpen();
+        if (typeof hIsOpen === 'boolean') return hIsOpen;
+      } catch(e) {}
+    }
+    if (typeof hours.isOpenNow === 'boolean') return hours.isOpenNow;
+
+    if (!hours.periods || hours.periods.length === 0) return null; // Unknown
+
+    const getDay = (pt: any) => pt.day ?? pt.dayOfWeek ?? 0;
+    const getHour = (pt: any) => pt.hour ?? (pt.time ? parseInt(pt.time.substring(0,2)) : 0);
+    const getMin = (pt: any) => pt.minute ?? (pt.time ? parseInt(pt.time.substring(2)) : 0);
 
     const is24Hours = hours.periods.some((p: any) => 
-      p.open?.day === 0 && p.open?.hour === 0 && p.open?.minute === 0 && !p.close
+      p.open && getDay(p.open) === 0 && getHour(p.open) === 0 && getMin(p.open) === 0 && !p.close
     );
     if (is24Hours) return true;
 
@@ -481,7 +515,7 @@ export default function App() {
     for (const period of hours.periods) {
       if (!period.open) continue;
       
-      const openMinutes = period.open.day * 24 * 60 + period.open.hour * 60 + period.open.minute;
+      const openMinutes = getDay(period.open) * 24 * 60 + getHour(period.open) * 60 + getMin(period.open);
       
       if (!period.close) {
         // If there's an open but no close, assume it's open 24 hours from that day
@@ -489,7 +523,7 @@ export default function App() {
         continue;
       }
       
-      let closeMinutes = period.close.day * 24 * 60 + period.close.hour * 60 + period.close.minute;
+      let closeMinutes = getDay(period.close) * 24 * 60 + getHour(period.close) * 60 + getMin(period.close);
       
       // If close time is before open time, it means it wraps around the week (e.g., open Saturday, close Sunday)
       if (closeMinutes < openMinutes) {
@@ -559,9 +593,23 @@ export default function App() {
     const randomIndex = Math.floor(Math.random() * places.length);
     const w = places[randomIndex];
     setWinner(w);
+    
+    // Bring winner to the top
+    setPlaces(prev => {
+      const others = prev.filter(p => p.id !== w.id);
+      return [w, ...others];
+    });
+
     setActivePlaceId(w.id);
-    map.panTo(w.location);
-    map.setZoom(17);
+    
+    if (map) {
+      map.panTo(getLatLng(w.location));
+      map.setZoom(17);
+    }
+    
+    // Scroll list to top
+    const listElement = document.getElementById('places-list');
+    if (listElement) listElement.scrollTop = 0;
   };
 
   const handleCopy = async (place: any) => {
@@ -635,8 +683,33 @@ export default function App() {
 
               {winner && (
                 <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-center">
-                  <div className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">🎉 天選之店</div>
-                  <div className="text-lg font-bold text-gray-900 dark:text-gray-100">{winner.displayName}</div>
+                  <div className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-2">🎉 天選之店</div>
+                  <div className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center justify-center gap-2">
+                    {winner.displayName}
+                  </div>
+                  <div className="mt-3 flex gap-2 justify-center">
+                    <button 
+                      onClick={() => {
+                        setActivePlaceId(winner.id);
+                        if (map) {
+                          map.panTo(getLatLng(winner.location));
+                          map.setZoom(17);
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-white dark:bg-gray-800 rounded-lg text-sm font-medium text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors shadow-sm"
+                    >
+                      📍 地圖
+                    </button>
+                    <button 
+                      onClick={() => {
+                         const loc = getLatLng(winner.location);
+                         window.open(`https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}`, '_blank');
+                      }}
+                      className="px-3 py-1.5 bg-blue-600 rounded-lg text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm whitespace-nowrap"
+                    >
+                      🧭 導航前往
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -756,12 +829,24 @@ export default function App() {
                     </div>
                     <span className="text-sm text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-gray-100">只顯示 4.0★ 以上店家</span>
                   </label>
+                  <label className="flex items-center gap-2 cursor-pointer group">
+                    <div className="relative flex items-center justify-center w-5 h-5">
+                      <input 
+                        type="checkbox" 
+                        checked={searchParams.hiddenGem}
+                        onChange={e => setSearchParams({...searchParams, hiddenGem: e.target.checked})}
+                        className="peer appearance-none w-5 h-5 border-2 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 checked:bg-blue-500 checked:border-blue-500 transition-colors cursor-pointer"
+                      />
+                      <Check className="w-3.5 h-3.5 text-white absolute pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity" strokeWidth={3} />
+                    </div>
+                    <span className="text-sm text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-gray-100">發掘隱藏小店 (&lt;1000評論)</span>
+                  </label>
                 </div>
               </div>
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900/50">
+          <div id="places-list" className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-gray-900/50">
             {(viewMode === 'search' ? places : favorites).length === 0 && !isSearching ? (
               <div className="flex flex-col items-center justify-center h-full p-8 text-center text-gray-400 dark:text-gray-600">
                 {viewMode === 'search' ? <MapPinOff className="w-12 h-12 mb-3 opacity-50" /> : <Heart className="w-12 h-12 mb-3 opacity-50" />}
