@@ -323,7 +323,7 @@ export default function App() {
         results = response.places || [];
       }
 
-      // Manual distance calculation (straight line estimate)
+      // Manual distance calculation (straight line estimate to start with)
       const newDistances: Record<string, string> = {};
       results.forEach((p: any) => {
         if (p.location && userLocation) {
@@ -347,10 +347,43 @@ export default function App() {
           
           // Estimate walking time (approx 80m per minute)
           const minutes = Math.ceil((distance * 1.3) / 80); // 1.3 factor for actual walking path vs straight line
-          newDistances[p.id] = `${minutes} 分鐘`;
+          newDistances[p.id] = `約 ${minutes} 分鐘`;
         }
       });
       setDistances(prev => ({ ...prev, ...newDistances }));
+
+      // Fetch accurate walking distances from BRouter asynchronously
+      const fetchBrouterDistances = async () => {
+        for (const p of results) {
+          if (p.location && userLocation) {
+            try {
+              const lon1 = userLocation.lng.toFixed(6);
+              const lat1 = userLocation.lat.toFixed(6);
+              const lon2 = p.location.lng.toFixed(6);
+              const lat2 = p.location.lat.toFixed(6);
+              const brouterUrl = `https://brouter.de/brouter?lonlats=${lon1},${lat1}|${lon2},${lat2}&profile=foot&alternativeidx=0&format=geojson`;
+              
+              const res = await fetch(brouterUrl);
+              const data = await res.json();
+              
+              if (data && data.features && data.features[0] && data.features[0].properties) {
+                 const seconds = data.features[0].properties['total-time'];
+                 if (seconds > 0) {
+                    const minutes = Math.ceil(seconds / 60);
+                    setDistances(prev => ({ ...prev, [p.id]: `${minutes} 分鐘` }));
+                 }
+              }
+            } catch (e) {
+              console.warn("Brouter API failed for", p.id);
+            }
+            // Add a small delay between requests to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, 200));
+          }
+        }
+      };
+      
+      // Run it in the background
+      fetchBrouterDistances();
 
       const existingIds = isLoadMore ? new Set(places.map(p => p.id)) : new Set();
       const uniqueNew = results.filter((p: any) => !existingIds.has(p.id));
@@ -560,25 +593,34 @@ export default function App() {
             </button>
           </div>
 
-          {/* Search Button - Always visible on mobile when in search mode */}
+          {/* Search Actions & Winner Box - ALWAYS VISIBLE */}
           {viewMode === 'search' && (
-            <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 md:hidden flex gap-2 shrink-0">
-              <button 
-                onClick={() => performSearch(false)}
-                disabled={isSearching || !userLocation}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-70 disabled:cursor-not-allowed shadow-sm"
-              >
-                {isSearching ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Search className="w-4 h-4" />}
-                {isSearching ? '搜尋中...' : '開始搜尋'}
-              </button>
-              <button 
-                onClick={drawWinner}
-                disabled={places.length === 0}
-                className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                title="天選之店！"
-              >
-                <Dices className="w-5 h-5" />
-              </button>
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col gap-3 shrink-0 shadow-sm z-10">
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => performSearch(false)}
+                  disabled={isSearching || !userLocation}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-70 disabled:cursor-not-allowed shadow-sm"
+                >
+                  {isSearching ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Search className="w-4 h-4" />}
+                  {isSearching ? '搜尋中...' : '開始搜尋'}
+                </button>
+                <button 
+                  onClick={drawWinner}
+                  disabled={places.length === 0}
+                  className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                  title="天選之店！"
+                >
+                  <Dices className="w-5 h-5" />
+                </button>
+              </div>
+
+              {winner && (
+                <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-center">
+                  <div className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">🎉 天選之店</div>
+                  <div className="text-lg font-bold text-gray-900 dark:text-gray-100">{winner.displayName}</div>
+                </div>
+              )}
             </div>
           )}
 
@@ -697,37 +739,6 @@ export default function App() {
                     <span className="text-sm text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-gray-100">只顯示 4.0★ 以上店家</span>
                   </label>
                 </div>
-
-                {winner && (
-                  <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-center">
-                    <div className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">🎉 天選之店</div>
-                    <div className="text-lg font-bold text-gray-900 dark:text-gray-100">{winner.displayName}</div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Search Button - Desktop version inside filters */}
-          {viewMode === 'search' && (
-            <div className="hidden md:block p-4 border-b border-gray-200 dark:border-gray-700">
-              <div className="flex gap-2">
-                <button 
-                  onClick={() => performSearch(false)}
-                  disabled={isSearching || !userLocation}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-70 disabled:cursor-not-allowed shadow-sm"
-                >
-                  {isSearching ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Search className="w-4 h-4" />}
-                  {isSearching ? '搜尋中...' : '開始搜尋'}
-                </button>
-                <button 
-                  onClick={drawWinner}
-                  disabled={places.length === 0}
-                  className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                  title="天選之店！"
-                >
-                  <Dices className="w-5 h-5" />
-                </button>
               </div>
             </div>
           )}

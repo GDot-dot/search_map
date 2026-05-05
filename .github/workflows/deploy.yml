@@ -3,7 +3,7 @@ on:
   push:
     branches: [main]
 
-# 關鍵修復：賦予 GitHub Actions 寫入分支的權限
+# 必須加上這個權限設定，GitHub Actions 才能把編譯好的檔案推送到 gh-pages 分支
 permissions:
   contents: write
 
