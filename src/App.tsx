@@ -97,6 +97,23 @@ const DARK_MAP_STYLE = [
   },
 ];
 
+const getLatLng = (loc: any) => ({
+  lat: typeof loc.lat === 'function' ? loc.lat() : loc.lat,
+  lng: typeof loc.lng === 'function' ? loc.lng() : loc.lng
+});
+
+const parsePriceLevel = (level: any): number => {
+  if (typeof level === 'number') return level;
+  switch (level) {
+    case 'PRICE_LEVEL_FREE': return 0;
+    case 'PRICE_LEVEL_INEXPENSIVE': return 1;
+    case 'PRICE_LEVEL_MODERATE': return 2;
+    case 'PRICE_LEVEL_EXPENSIVE': return 3;
+    case 'PRICE_LEVEL_VERY_EXPENSIVE': return 4;
+    default: return 0;
+  }
+};
+
 export default function App() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [map, setMap] = useState<any>(null);
@@ -329,8 +346,7 @@ export default function App() {
         if (p.location && userLocation) {
           const lat1 = userLocation.lat;
           const lon1 = userLocation.lng;
-          const lat2 = p.location.lat;
-          const lon2 = p.location.lng;
+          const { lat: lat2, lng: lon2 } = getLatLng(p.location);
           
           // Haversine formula
           const R = 6371e3; // metres
@@ -359,8 +375,9 @@ export default function App() {
             try {
               const lon1 = userLocation.lng.toFixed(6);
               const lat1 = userLocation.lat.toFixed(6);
-              const lon2 = p.location.lng.toFixed(6);
-              const lat2 = p.location.lat.toFixed(6);
+              const { lat: lat2Num, lng: lon2Num } = getLatLng(p.location);
+              const lon2 = lon2Num.toFixed(6);
+              const lat2 = lat2Num.toFixed(6);
               const brouterUrl = `https://brouter.de/brouter?lonlats=${lon1},${lat1}|${lon2},${lat2}&profile=foot&alternativeidx=0&format=geojson`;
               
               const res = await fetch(brouterUrl);
@@ -391,7 +408,8 @@ export default function App() {
       const filtered = uniqueNew.filter((p: any) => {
         if (searchParams.ratingFilter && p.rating && p.rating < 4.0) return false;
         if (searchParams.price !== 'any') {
-          if (p.priceLevel == null || p.priceLevel > parseInt(searchParams.price)) return false;
+          const pLevel = parsePriceLevel(p.priceLevel);
+          if (pLevel == null || pLevel === 0 || pLevel > parseInt(searchParams.price)) return false;
         }
         if (searchParams.openNow) {
           // If openNow is checked, only show if we are sure it's open
@@ -790,10 +808,9 @@ export default function App() {
                             {place.userRatingCount && <span className="text-gray-400 dark:text-gray-500 font-normal ml-1">({place.userRatingCount})</span>}
                           </div>
                         )}
-                        {place.priceLevel != null && (
+                        {place.priceLevel != null && parsePriceLevel(place.priceLevel) > 0 && (
                           <div className="flex items-center text-gray-500 dark:text-gray-400">
-                            <DollarSign className="w-3.5 h-3.5 mr-0.5" />
-                            {'$'.repeat(place.priceLevel)}
+                            {'$'.repeat(parsePriceLevel(place.priceLevel))}
                           </div>
                         )}
                         {status && (
