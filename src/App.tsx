@@ -20,6 +20,8 @@ interface SearchParams {
 const DEFAULT_RADIUS_METERS = 5000;
 const MAX_INITIAL_SEARCH_REQUESTS = 8;
 const MAX_LOAD_MORE_SEARCH_REQUESTS = 6;
+const MAX_LOAD_MORE_ROUNDS = 6;
+const MAX_NO_CHANGE_ROUNDS = 2;
 
 const FOOD_RELATED_TYPES = ['restaurant', 'cafe', 'bakery', 'meal_takeaway'];
 const TYPE_EXPANSIONS: Record<string, string[]> = {
@@ -144,9 +146,10 @@ const getDistanceMeters = (from: any, to: any) => {
   return R * c;
 };
 
-const getSearchCenters = (center: any, radius: number, isLoadMore: boolean) => {
+const getSearchCenters = (center: any, radius: number, searchRound: number) => {
   const { lat, lng } = getLatLng(center);
-  const stepMeters = Math.min(Math.max(radius * (isLoadMore ? 0.55 : 0.38), 450), 2500);
+  const stepRatio = searchRound === 0 ? 0.38 : 0.38 + searchRound * 0.22;
+  const stepMeters = Math.min(Math.max(radius * stepRatio, 450), radius * 0.85, 3500);
   const latStep = stepMeters / 111320;
   const lngStep = stepMeters / (111320 * Math.max(Math.cos(lat * Math.PI / 180), 0.2));
   const centers = [
@@ -157,7 +160,7 @@ const getSearchCenters = (center: any, radius: number, isLoadMore: boolean) => {
     { lat, lng: lng - lngStep, label: '西側' },
   ];
 
-  if (isLoadMore) {
+  if (searchRound > 0) {
     centers.push(
       { lat: lat + latStep, lng: lng + lngStep, label: '東北側' },
       { lat: lat + latStep, lng: lng - lngStep, label: '西北側' },
@@ -245,7 +248,9 @@ export default function App() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasNextPage, setHasNextPage] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
-  const [searchStats, setSearchStats] = useState({ requests: 0, results: 0 });
+  const [loadMoreRound, setLoadMoreRound] = useState(0);
+  const [noChangeRounds, setNoChangeRounds] = useState(0);
+  const [searchStats, setSearchStats] = useState({ requests: 0, results: 0, added: 0, round: 0, noChangeRounds: 0, message: '' });
   const [searchParams, setSearchParams] = useState<SearchParams>({
     keyword: '',
     type: 'restaurant',
@@ -413,7 +418,9 @@ export default function App() {
     if (!isLoadMore) {
       setDistances({});
       setHasNextPage(false);
-      setSearchStats({ requests: 0, results: 0 });
+      setLoadMoreRound(0);
+      setNoChangeRounds(0);
+      setSearchStats({ requests: 0, results: 0, added: 0, round: 0, noChangeRounds: 0, message: '' });
     }
     
     try {
@@ -432,7 +439,8 @@ export default function App() {
       ];
 
       const radius = parseInt(searchParams.radius);
-      const centers = getSearchCenters(userLocation, radius, isLoadMore);
+      const nextRound = isLoadMore ? Math.min(loadMoreRound + 1, MAX_LOAD_MORE_ROUNDS) : 0;
+      const centers = getSearchCenters(userLocation, radius, nextRound);
       const maxRequests = isLoadMore ? MAX_LOAD_MORE_SEARCH_REQUESTS : MAX_INITIAL_SEARCH_REQUESTS;
       const tasks: any[] = [];
 
@@ -530,7 +538,7 @@ export default function App() {
       const results = Array.from(bestById.values())
         .sort((a, b) => b.score - a.score)
         .map(item => item.place);
-      const currentHasNextPage = fullResultResponses > 0 || tasks.length > selectedTasks.length;
+      const currentHasNextPage = (fullResultResponses > 0 || tasks.length > selectedTasks.length);
 
       const existingIds = isLoadMore ? new Set(places.map(p => p.id)) : new Set();
       const uniqueNew = results.filter((p: any) => !existingIds.has(p.id));
@@ -554,36 +562,40 @@ export default function App() {
       });
 
       const combined = isLoadMore ? [...places, ...filtered] : filtered;
+      const addedCount = filtered.length;
+      const nextNoChangeRounds = isLoadMore
+        ? (addedCount === 0 ? noChangeRounds + 1 : 0)
+        : 0;
+      const reachedMaxRound = nextRound >= MAX_LOAD_MORE_ROUNDS;
+      const reachedNoChangeLimit = nextNoChangeRounds >= MAX_NO_CHANGE_ROUNDS;
+      const shouldOfferMore = currentHasNextPage && !reachedMaxRound && !reachedNoChangeLimit;
+      const searchMessage = reachedNoChangeLimit
+        ? `已連續 ${MAX_NO_CHANGE_ROUNDS} 輪沒有新增店家，附近結果可能已接近極限`
+        : reachedMaxRound
+          ? '已達這次搜尋的安全上限，可放寬距離或換關鍵字再找'
+          : isLoadMore && addedCount === 0
+            ? `這一輪沒有新增店家，再試 ${MAX_NO_CHANGE_ROUNDS - nextNoChangeRounds} 輪沒有變化就會停止`
+            : '';
       if (searchRunRef.current !== searchRunId) return;
       setPlaces(combined);
       updateMarkers(combined);
-      setHasNextPage(currentHasNextPage);
+      setHasNextPage(shouldOfferMore);
+      setLoadMoreRound(nextRound);
+      setNoChangeRounds(nextNoChangeRounds);
       setSearchStats(prev => ({
         requests: isLoadMore ? prev.requests + executedSearches : executedSearches,
         results: combined.length,
+        added: addedCount,
+        round: nextRound,
+        noChangeRounds: nextNoChangeRounds,
+        message: searchMessage,
       }));
 
       // Manual distance calculation (straight line estimate to start with)
       const newDistances: Record<string, string> = {};
       filtered.forEach((p: any) => {
         if (p.location && userLocation) {
-          const lat1 = userLocation.lat;
-          const lon1 = userLocation.lng;
-          const { lat: lat2, lng: lon2 } = getLatLng(p.location);
-          
-          // Haversine formula
-          const R = 6371e3; // metres
-          const φ1 = lat1 * Math.PI/180;
-          const φ2 = lat2 * Math.PI/180;
-          const Δφ = (lat2-lat1) * Math.PI/180;
-          const Δλ = (lon2-lon1) * Math.PI/180;
-
-          const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                  Math.cos(φ1) * Math.cos(φ2) *
-                  Math.sin(Δλ/2) * Math.sin(Δλ/2);
-          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-          const distance = R * c; // in metres
-          
+          const distance = getDistanceMeters(userLocation, p.location);
           // Estimate walking time (approx 80m per minute)
           const minutes = Math.ceil((distance * 1.3) / 80); // 1.3 factor for actual walking path vs straight line
           newDistances[p.id] = `約 ${minutes} 分鐘`;
@@ -815,7 +827,7 @@ export default function App() {
       <header className="bg-white dark:bg-gray-800 px-4 h-14 flex items-center justify-between border-b border-gray-200 dark:border-gray-700 shrink-0 z-10 shadow-sm">
         <div className="flex items-center">
           <Compass className="w-6 h-6 text-blue-600 mr-2" />
-          <h1 className="text-lg font-bold text-gray-800 dark:text-gray-100">附近優質店家探測器 V5.0</h1>
+          <h1 className="text-lg font-bold text-gray-800 dark:text-gray-100">附近優質店家探測器 V5.1</h1>
         </div>
         <div className="flex items-center gap-2">
           <button 
@@ -869,9 +881,20 @@ export default function App() {
               </div>
 
               {hasSearched && viewMode === 'search' && (
-                <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-                  <span>{isSearching ? '正在擴大掃描附近店家...' : `已掃描 ${searchStats.requests} 次，整理出 ${searchStats.results} 間`}</span>
-                  <span className="text-gray-400 dark:text-gray-500">深度搜尋</span>
+                <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span>{isSearching ? '正在擴大掃描附近店家...' : `已掃描 ${searchStats.requests} 次，整理出 ${searchStats.results} 間`}</span>
+                    <span className="text-gray-400 dark:text-gray-500">深度搜尋</span>
+                  </div>
+                  {!isSearching && searchStats.round > 0 && (
+                    <div>已追加搜尋 {searchStats.round}/{MAX_LOAD_MORE_ROUNDS} 輪</div>
+                  )}
+                  {!isSearching && searchStats.added > 0 && (
+                    <div className="text-green-600 dark:text-green-400">本輪新增 {searchStats.added} 間店家</div>
+                  )}
+                  {!isSearching && searchStats.message && (
+                    <div className="text-amber-600 dark:text-amber-400">{searchStats.message}</div>
+                  )}
                 </div>
               )}
 
@@ -1135,7 +1158,7 @@ export default function App() {
                       disabled={isLoadingMore}
                       className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors"
                     >
-                      {isLoadingMore ? '載入中...' : '載入更多結果'}
+                      {isLoadingMore ? '載入中...' : `再找一輪 ${Math.min(loadMoreRound + 1, MAX_LOAD_MORE_ROUNDS)}/${MAX_LOAD_MORE_ROUNDS}`}
                     </button>
                   </div>
                 )}
