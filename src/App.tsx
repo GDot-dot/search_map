@@ -225,6 +225,62 @@ const getWeightedRandom = (items: any[], getWeight: (item: any) => number) => {
   return weighted[weighted.length - 1]?.item;
 };
 
+const getResultTags = (place: any, distanceText?: string) => {
+  const tags: Array<{ text: string; className: string }> = [];
+  const rating = typeof place.rating === 'number' ? place.rating : 0;
+  const reviews = typeof place.userRatingCount === 'number' ? place.userRatingCount : 0;
+  const minutes = Number(distanceText?.match(/\d+/)?.[0] || 0);
+
+  if (minutes > 0 && minutes <= 10) {
+    tags.push({ text: '近', className: 'text-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-300' });
+  }
+  if (rating >= 4.3) {
+    tags.push({ text: '高評價', className: 'text-amber-600 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-300' });
+  }
+  if (reviews >= 500) {
+    tags.push({ text: '很多人評', className: 'text-purple-600 bg-purple-50 dark:bg-purple-900/20 dark:text-purple-300' });
+  } else if (reviews > 0 && reviews < 100) {
+    tags.push({ text: '新發現', className: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-300' });
+  }
+
+  return tags.slice(0, 3);
+};
+
+const escapeHtml = (value: any) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#039;');
+
+const getMapsSearchUrl = (place: any) =>
+  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.displayName)}&query_place_id=${place.id}`;
+
+const getMapsDirectionsUrl = (place: any) => {
+  const loc = getLatLng(place.location);
+  return `https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}`;
+};
+
+const getMapInfoContent = (place: any, distanceText?: string) => {
+  const rating = typeof place.rating === 'number' ? `${place.rating.toFixed(1)} ★` : '尚無評分';
+  const reviews = place.userRatingCount ? ` (${place.userRatingCount})` : '';
+  const price = place.priceLevel != null && parsePriceLevel(place.priceLevel) > 0
+    ? '$'.repeat(parsePriceLevel(place.priceLevel))
+    : '';
+
+  return `
+    <div style="min-width:220px;max-width:280px;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111827;">
+      <div style="font-weight:700;font-size:14px;line-height:1.35;margin-bottom:6px;">${escapeHtml(place.displayName)}</div>
+      <div style="font-size:12px;color:#4b5563;margin-bottom:4px;">${escapeHtml(rating)}${escapeHtml(reviews)}${price ? ` · ${escapeHtml(price)}` : ''}${distanceText ? ` · 步行 ${escapeHtml(distanceText)}` : ''}</div>
+      <div style="font-size:12px;color:#6b7280;line-height:1.4;margin-bottom:10px;">${escapeHtml(place.formattedAddress || '')}</div>
+      <div style="display:flex;gap:8px;">
+        <a href="${getMapsDirectionsUrl(place)}" target="_blank" rel="noopener noreferrer" style="flex:1;text-align:center;background:#2563eb;color:white;text-decoration:none;padding:7px 8px;border-radius:8px;font-size:12px;font-weight:700;">導航</a>
+        <a href="${getMapsSearchUrl(place)}" target="_blank" rel="noopener noreferrer" style="flex:1;text-align:center;border:1px solid #d1d5db;color:#374151;text-decoration:none;padding:7px 8px;border-radius:8px;font-size:12px;font-weight:700;">詳情</a>
+      </div>
+    </div>
+  `;
+};
+
 const parsePriceLevel = (level: any): number => {
   if (level == null) return -1;
   if (typeof level === 'number') return level;
@@ -287,6 +343,7 @@ export default function App() {
     hiddenGem: false,
   });
   const [winner, setWinner] = useState<any>(null);
+  const [lastWinnerId, setLastWinnerId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(true);
   const [viewMode, setViewMode] = useState<'search' | 'favorites'>('search');
 
@@ -295,6 +352,7 @@ export default function App() {
   const markersRef = useRef<Array<{ id: string; marker: any; element: HTMLElement }>>([]);
   const placeRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const userMarkerRef = useRef<any>(null);
+  const infoWindowRef = useRef<any>(null);
   const searchRunRef = useRef(0);
 
   useEffect(() => {
@@ -447,6 +505,10 @@ export default function App() {
 
     if (!window.google || newPlaces.length === 0) return;
     const { AdvancedMarkerElement, PinElement } = await window.google.maps.importLibrary("marker");
+    const { InfoWindow } = await window.google.maps.importLibrary("maps");
+    if (!infoWindowRef.current) {
+      infoWindowRef.current = new InfoWindow();
+    }
 
     newPlaces.forEach(place => {
       const pin = new PinElement({ background: '#EA4335', borderColor: '#FFFFFF', glyphColor: '#FFFFFF' });
@@ -459,6 +521,8 @@ export default function App() {
       
       marker.addListener('click', () => {
         focusPlace(place, { scrollList: true, zoom: 17 });
+        infoWindowRef.current.setContent(getMapInfoContent(place, distances[place.id]));
+        infoWindowRef.current.open({ anchor: marker, map });
       });
       
       markersRef.current.push({ id: place.id, marker, element: pin.element });
@@ -700,7 +764,7 @@ export default function App() {
       // Run it in the background.
       fetchBrouterDistances();
       
-      if (!isLoadMore && window.innerWidth < 768) {
+      if (!isLoadMore) {
         setShowFilters(false);
       }
 
@@ -732,6 +796,12 @@ export default function App() {
     setLoadMoreRound(0);
     setNoChangeRounds(0);
     setSearchStats({ requests: 0, results: places.length, added: 0, round: 0, noChangeRounds: 0, message: '' });
+  };
+
+  const updateSearchParams = (patch: Partial<SearchParams>) => {
+    setActiveScenario(null);
+    setSearchParams(prev => ({ ...prev, ...patch }));
+    resetSearchProgress();
   };
 
   const applyScenario = (scenarioId: ScenarioId) => {
@@ -883,7 +953,10 @@ export default function App() {
     }
 
     const openCandidates = places.filter(place => checkIsOpenNow(place) !== false);
-    const candidates = openCandidates.length >= 3 ? openCandidates : places;
+    const baseCandidates = openCandidates.length >= 3 ? openCandidates : places;
+    const candidates = baseCandidates.length > 1
+      ? baseCandidates.filter(place => place.id !== lastWinnerId)
+      : baseCandidates;
     const w = getWeightedRandom(candidates, (place) => {
       const rating = typeof place.rating === 'number' ? place.rating : 3.5;
       const reviews = typeof place.userRatingCount === 'number' ? place.userRatingCount : 0;
@@ -899,6 +972,7 @@ export default function App() {
     if (!w) return;
 
     setWinner(w);
+    setLastWinnerId(w.id);
     
     // Bring winner to the top
     setPlaces(prev => {
@@ -933,7 +1007,7 @@ export default function App() {
       <header className="bg-white dark:bg-gray-800 px-4 h-14 flex items-center justify-between border-b border-gray-200 dark:border-gray-700 shrink-0 z-10 shadow-sm">
         <div className="flex items-center">
           <Compass className="w-6 h-6 text-blue-600 mr-2" />
-          <h1 className="text-lg font-bold text-gray-800 dark:text-gray-100">附近優質店家探測器 V5.2</h1>
+          <h1 className="text-lg font-bold text-gray-800 dark:text-gray-100">附近優質店家探測器 V5.4</h1>
         </div>
         <div className="flex items-center gap-2">
           <button 
@@ -984,6 +1058,17 @@ export default function App() {
                 >
                   <Dices className="w-5 h-5" />
                 </button>
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`px-3 py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center transition-colors shadow-sm border ${
+                    showFilters
+                      ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-300'
+                      : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  }`}
+                  title={showFilters ? '隱藏篩選' : '展開篩選'}
+                >
+                  <Filter className="w-5 h-5" />
+                </button>
               </div>
 
               {hasSearched && viewMode === 'search' && (
@@ -1005,19 +1090,15 @@ export default function App() {
               )}
 
               {winner && (
-                <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-center">
+                <div className="p-3 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-center">
                   <div className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-2">🎉 智慧抽選</div>
-                  <div className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center justify-center gap-2">
+                  <div className="text-base font-bold text-gray-900 dark:text-gray-100 flex items-center justify-center gap-2">
                     {winner.displayName}
                   </div>
                   <div className="mt-3 flex gap-2 justify-center">
                     <button 
                       onClick={() => {
-                        setActivePlaceId(winner.id);
-                        if (map) {
-                          map.panTo(getLatLng(winner.location));
-                          map.setZoom(17);
-                        }
+                        focusPlace(winner, { scrollList: true, zoom: 17 });
                       }}
                       className="px-3 py-1.5 bg-white dark:bg-gray-800 rounded-lg text-sm font-medium text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors shadow-sm"
                     >
@@ -1054,7 +1135,7 @@ export default function App() {
           </div>
 
           {viewMode === 'search' && (
-            <div className={`flex-col shrink-0 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 transition-all duration-300 overflow-y-auto max-h-[60vh] md:max-h-none ${showFilters ? 'flex' : 'hidden md:flex'}`}>
+            <div className={`flex-col shrink-0 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 transition-all duration-300 overflow-y-auto max-h-[60vh] md:max-h-[46vh] ${showFilters ? 'flex' : 'hidden'}`}>
               <div className="p-4 space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">搜尋中心</label>
@@ -1098,7 +1179,7 @@ export default function App() {
                     <input 
                       type="text" 
                       value={searchParams.keyword}
-                      onChange={e => { setActiveScenario(null); setSearchParams({...searchParams, keyword: e.target.value}); }}
+                      onChange={e => updateSearchParams({ keyword: e.target.value })}
                       placeholder="例如：拉麵、甜點、咖啡"
                       className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100"
                     />
@@ -1107,7 +1188,7 @@ export default function App() {
                     <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">類型</label>
                     <select 
                       value={searchParams.type}
-                      onChange={e => { setActiveScenario(null); setSearchParams({...searchParams, type: e.target.value}); }}
+                      onChange={e => updateSearchParams({ type: e.target.value })}
                       className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100"
                     >
                       <option value="restaurant">餐廳美食</option>
@@ -1125,7 +1206,7 @@ export default function App() {
                     <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">距離</label>
                     <select 
                       value={searchParams.radius}
-                      onChange={e => { setActiveScenario(null); setSearchParams({...searchParams, radius: e.target.value}); }}
+                      onChange={e => updateSearchParams({ radius: e.target.value })}
                       className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100"
                     >
                       <option value="1000">1 km 內</option>
@@ -1138,7 +1219,7 @@ export default function App() {
                     <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">價位</label>
                     <select 
                       value={searchParams.price}
-                      onChange={e => { setActiveScenario(null); setSearchParams({...searchParams, price: e.target.value}); }}
+                      onChange={e => updateSearchParams({ price: e.target.value })}
                       className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100"
                     >
                       <option value="any">不限</option>
@@ -1156,7 +1237,7 @@ export default function App() {
                       <input 
                         type="checkbox" 
                         checked={searchParams.openNow}
-                        onChange={e => { setActiveScenario(null); setSearchParams({...searchParams, openNow: e.target.checked}); }}
+                        onChange={e => updateSearchParams({ openNow: e.target.checked })}
                         className="peer appearance-none w-5 h-5 border-2 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 checked:bg-blue-500 checked:border-blue-500 transition-colors cursor-pointer"
                       />
                       <Check className="w-3.5 h-3.5 text-white absolute pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity" strokeWidth={3} />
@@ -1168,7 +1249,7 @@ export default function App() {
                       <input 
                         type="checkbox" 
                         checked={searchParams.ratingFilter}
-                        onChange={e => { setActiveScenario(null); setSearchParams({...searchParams, ratingFilter: e.target.checked}); }}
+                        onChange={e => updateSearchParams({ ratingFilter: e.target.checked })}
                         className="peer appearance-none w-5 h-5 border-2 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 checked:bg-blue-500 checked:border-blue-500 transition-colors cursor-pointer"
                       />
                       <Check className="w-3.5 h-3.5 text-white absolute pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity" strokeWidth={3} />
@@ -1180,7 +1261,7 @@ export default function App() {
                       <input 
                         type="checkbox" 
                         checked={searchParams.hiddenGem}
-                        onChange={e => { setActiveScenario(null); setSearchParams({...searchParams, hiddenGem: e.target.checked}); }}
+                        onChange={e => updateSearchParams({ hiddenGem: e.target.checked })}
                         className="peer appearance-none w-5 h-5 border-2 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 checked:bg-blue-500 checked:border-blue-500 transition-colors cursor-pointer"
                       />
                       <Check className="w-3.5 h-3.5 text-white absolute pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity" strokeWidth={3} />
@@ -1204,6 +1285,7 @@ export default function App() {
                 {(viewMode === 'search' ? places : favorites).map(place => {
                   const status = getOpeningStatus(place);
                   const isFav = favorites.some(f => f.id === place.id);
+                  const resultTags = getResultTags(place, distances[place.id]);
                   
                   return (
                     <div 
@@ -1229,6 +1311,16 @@ export default function App() {
                           </button>
                         </div>
                       </div>
+
+                      {resultTags.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                          {resultTags.map(tag => (
+                            <span key={tag.text} className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${tag.className}`}>
+                              {tag.text}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-600 dark:text-gray-400 mb-2">
                         {place.rating && (
