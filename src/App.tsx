@@ -225,8 +225,11 @@ const getWeightedRandom = (items: any[], getWeight: (item: any) => number) => {
   return weighted[weighted.length - 1]?.item;
 };
 
+type ResultTag = { text: string; className: string };
+type OpeningStatus = { isOpen: boolean; text: string; color: string } | null;
+
 const getResultTags = (place: any, distanceText?: string) => {
-  const tags: Array<{ text: string; className: string }> = [];
+  const tags: ResultTag[] = [];
   const rating = typeof place.rating === 'number' ? place.rating : 0;
   const reviews = typeof place.userRatingCount === 'number' ? place.userRatingCount : 0;
   const minutes = Number(distanceText?.match(/\d+/)?.[0] || 0);
@@ -261,18 +264,42 @@ const getMapsDirectionsUrl = (place: any) => {
   return `https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}`;
 };
 
-const getMapInfoContent = (place: any, distanceText?: string) => {
+const tagClassToInlineStyle = (className: string) => {
+  if (className.includes('amber')) return 'color:#b45309;background:#fffbeb;';
+  if (className.includes('purple')) return 'color:#7c3aed;background:#f5f3ff;';
+  if (className.includes('emerald')) return 'color:#047857;background:#ecfdf5;';
+  return 'color:#2563eb;background:#eff6ff;';
+};
+
+const statusClassToInlineStyle = (className: string) => {
+  if (className.includes('green')) return 'color:#16a34a;background:#f0fdf4;';
+  if (className.includes('red')) return 'color:#dc2626;background:#fef2f2;';
+  if (className.includes('orange')) return 'color:#ea580c;background:#fff7ed;';
+  return 'color:#4b5563;background:#f9fafb;';
+};
+
+const getMapInfoContent = (place: any, options: { distanceText?: string; status?: OpeningStatus; tags?: ResultTag[] } = {}) => {
+  const { distanceText, status, tags = [] } = options;
   const rating = typeof place.rating === 'number' ? `${place.rating.toFixed(1)} ★` : '尚無評分';
   const reviews = place.userRatingCount ? ` (${place.userRatingCount})` : '';
   const price = place.priceLevel != null && parsePriceLevel(place.priceLevel) > 0
     ? '$'.repeat(parsePriceLevel(place.priceLevel))
     : '';
+  const tagHtml = tags.map(tag => `
+    <span style="display:inline-block;${tagClassToInlineStyle(tag.className)}border-radius:999px;padding:2px 7px;font-size:11px;font-weight:700;margin:0 4px 5px 0;">${escapeHtml(tag.text)}</span>
+  `).join('');
+  const statusHtml = status
+    ? `<span style="display:inline-flex;align-items:center;${statusClassToInlineStyle(status.color)}border-radius:999px;padding:2px 7px;font-size:11px;font-weight:700;margin-left:6px;">${escapeHtml(status.text)}</span>`
+    : '';
 
   return `
-    <div style="min-width:220px;max-width:280px;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111827;">
-      <div style="font-weight:700;font-size:14px;line-height:1.35;margin-bottom:6px;">${escapeHtml(place.displayName)}</div>
-      <div style="font-size:12px;color:#4b5563;margin-bottom:4px;">${escapeHtml(rating)}${escapeHtml(reviews)}${price ? ` · ${escapeHtml(price)}` : ''}${distanceText ? ` · 步行 ${escapeHtml(distanceText)}` : ''}</div>
-      <div style="font-size:12px;color:#6b7280;line-height:1.4;margin-bottom:10px;">${escapeHtml(place.formattedAddress || '')}</div>
+    <div style="min-width:240px;max-width:310px;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111827;">
+      <div style="font-weight:800;font-size:15px;line-height:1.35;margin-bottom:7px;">${escapeHtml(place.displayName)}</div>
+      ${tagHtml ? `<div style="margin-bottom:5px;">${tagHtml}</div>` : ''}
+      <div style="font-size:12px;color:#4b5563;margin-bottom:6px;">
+        <span style="color:#f59e0b;font-weight:800;">${escapeHtml(rating)}</span>${escapeHtml(reviews)}${price ? ` · ${escapeHtml(price)}` : ''}${distanceText ? ` · 步行 ${escapeHtml(distanceText)}` : ''}${statusHtml}
+      </div>
+      <div style="font-size:12px;color:#6b7280;line-height:1.45;margin-bottom:11px;">${escapeHtml(place.formattedAddress || '')}</div>
       <div style="display:flex;gap:8px;">
         <a href="${getMapsDirectionsUrl(place)}" target="_blank" rel="noopener noreferrer" style="flex:1;text-align:center;background:#2563eb;color:white;text-decoration:none;padding:7px 8px;border-radius:8px;font-size:12px;font-weight:700;">導航</a>
         <a href="${getMapsSearchUrl(place)}" target="_blank" rel="noopener noreferrer" style="flex:1;text-align:center;border:1px solid #d1d5db;color:#374151;text-decoration:none;padding:7px 8px;border-radius:8px;font-size:12px;font-weight:700;">詳情</a>
@@ -493,6 +520,16 @@ export default function App() {
         placeRefs.current[place.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       });
     }
+
+    const markerEntry = markersRef.current.find(entry => entry.id === place.id);
+    if (markerEntry && infoWindowRef.current && map) {
+      infoWindowRef.current.setContent(getMapInfoContent(place, {
+        distanceText: distances[place.id],
+        status: getOpeningStatus(place),
+        tags: getResultTags(place, distances[place.id]),
+      }));
+      infoWindowRef.current.open({ anchor: markerEntry.marker, map });
+    }
   };
 
   useEffect(() => {
@@ -521,8 +558,6 @@ export default function App() {
       
       marker.addListener('click', () => {
         focusPlace(place, { scrollList: true, zoom: 17 });
-        infoWindowRef.current.setContent(getMapInfoContent(place, distances[place.id]));
-        infoWindowRef.current.open({ anchor: marker, map });
       });
       
       markersRef.current.push({ id: place.id, marker, element: pin.element });
@@ -1007,7 +1042,7 @@ export default function App() {
       <header className="bg-white dark:bg-gray-800 px-4 h-14 flex items-center justify-between border-b border-gray-200 dark:border-gray-700 shrink-0 z-10 shadow-sm">
         <div className="flex items-center">
           <Compass className="w-6 h-6 text-blue-600 mr-2" />
-          <h1 className="text-lg font-bold text-gray-800 dark:text-gray-100">附近優質店家探測器 V5.4</h1>
+          <h1 className="text-lg font-bold text-gray-800 dark:text-gray-100">附近優質店家探測器 V5.5</h1>
         </div>
         <div className="flex items-center gap-2">
           <button 
