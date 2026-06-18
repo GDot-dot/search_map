@@ -17,6 +17,8 @@ interface SearchParams {
   hiddenGem: boolean;
 }
 
+type ScenarioId = 'open_now' | 'walkable' | 'high_rating' | 'budget' | 'hidden_gem' | 'coffee_dessert';
+
 const DEFAULT_RADIUS_METERS = 5000;
 const MAX_INITIAL_SEARCH_REQUESTS = 8;
 const MAX_LOAD_MORE_SEARCH_REQUESTS = 6;
@@ -42,6 +44,15 @@ const KEYWORD_EXPANSIONS: Record<string, string[]> = {
   '義大利麵': ['pasta', '義式餐廳'],
   '酒吧': ['bar', '餐酒館'],
 };
+
+const SCENARIOS: Array<{ id: ScenarioId; label: string; params: Partial<SearchParams> }> = [
+  { id: 'open_now', label: '現在能吃', params: { openNow: true } },
+  { id: 'walkable', label: '走路近', params: { radius: '1000' } },
+  { id: 'high_rating', label: '高評價', params: { ratingFilter: true } },
+  { id: 'budget', label: '便宜', params: { price: '1' } },
+  { id: 'hidden_gem', label: '隱藏小店', params: { hiddenGem: true, ratingFilter: false } },
+  { id: 'coffee_dessert', label: '咖啡甜點', params: { keyword: '咖啡 甜點', type: 'cafe', radius: '3000' } },
+];
 
 const DARK_MAP_STYLE = [
   { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
@@ -201,6 +212,19 @@ const scorePlace = (place: any, center: any) => {
   return ratingScore + reviewScore - distancePenalty;
 };
 
+const getWeightedRandom = (items: any[], getWeight: (item: any) => number) => {
+  const weighted = items.map(item => ({ item, weight: Math.max(getWeight(item), 1) }));
+  const total = weighted.reduce((sum, entry) => sum + entry.weight, 0);
+  let cursor = Math.random() * total;
+
+  for (const entry of weighted) {
+    cursor -= entry.weight;
+    if (cursor <= 0) return entry.item;
+  }
+
+  return weighted[weighted.length - 1]?.item;
+};
+
 const parsePriceLevel = (level: any): number => {
   if (level == null) return -1;
   if (typeof level === 'number') return level;
@@ -248,6 +272,8 @@ export default function App() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasNextPage, setHasNextPage] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [searchCenterLabel, setSearchCenterLabel] = useState('正在取得位置');
+  const [activeScenario, setActiveScenario] = useState<ScenarioId | null>(null);
   const [loadMoreRound, setLoadMoreRound] = useState(0);
   const [noChangeRounds, setNoChangeRounds] = useState(0);
   const [searchStats, setSearchStats] = useState({ requests: 0, results: 0, added: 0, round: 0, noChangeRounds: 0, message: '' });
@@ -266,7 +292,8 @@ export default function App() {
 
   const mapRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const markersRef = useRef<any[]>([]);
+  const markersRef = useRef<Array<{ id: string; marker: any; element: HTMLElement }>>([]);
+  const placeRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const userMarkerRef = useRef<any>(null);
   const searchRunRef = useRef(0);
 
@@ -312,6 +339,7 @@ export default function App() {
             async (position) => {
               const loc = { lat: position.coords.latitude, lng: position.coords.longitude };
               setUserLocation(loc);
+              setSearchCenterLabel('我的目前位置');
               newMap.setCenter(loc);
               
               const { AdvancedMarkerElement, PinElement } = await window.google.maps.importLibrary("marker");
@@ -322,11 +350,13 @@ export default function App() {
             },
             () => {
               setUserLocation(defaultCenter);
+              setSearchCenterLabel('台北車站附近');
             },
             { timeout: 10000, enableHighAccuracy: true }
           );
         } else {
           setUserLocation(defaultCenter);
+          setSearchCenterLabel('台北車站附近');
         }
       } catch (error) {
         console.error("Map initialization failed", error);
@@ -353,7 +383,7 @@ export default function App() {
       const { Autocomplete } = await window.google.maps.importLibrary("places");
       const autocomplete = new Autocomplete(searchInputRef.current, {
         componentRestrictions: { country: "tw" },
-        fields: ["geometry", "name"],
+        fields: ["geometry", "name", "formatted_address"],
         types: ["establishment", "geocode"]
       });
 
@@ -362,6 +392,7 @@ export default function App() {
         if (place.geometry && place.geometry.location) {
           const loc = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
           setUserLocation(loc);
+          setSearchCenterLabel(place.name || place.formatted_address || '自訂搜尋中心');
           map.setCenter(loc);
           map.setZoom(15);
           
@@ -380,8 +411,38 @@ export default function App() {
     initAutocomplete();
   }, [isLoaded, map]);
 
+  const refreshMarkerFocus = (placeId: string | null) => {
+    markersRef.current.forEach(({ id, marker, element }) => {
+      const isActive = id === placeId;
+      element.style.transform = isActive ? 'scale(1.22)' : 'scale(1)';
+      element.style.transition = 'transform 160ms ease';
+      marker.zIndex = isActive ? 80 : undefined;
+    });
+  };
+
+  const focusPlace = (place: any, options: { scrollList?: boolean; zoom?: number } = {}) => {
+    if (!place) return;
+    const loc = getLatLng(place.location);
+    setActivePlaceId(place.id);
+
+    if (map && Number.isFinite(loc.lat) && Number.isFinite(loc.lng)) {
+      map.panTo(loc);
+      map.setZoom(options.zoom ?? 17);
+    }
+
+    if (options.scrollList) {
+      requestAnimationFrame(() => {
+        placeRefs.current[place.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    }
+  };
+
+  useEffect(() => {
+    refreshMarkerFocus(activePlaceId);
+  }, [activePlaceId]);
+
   const updateMarkers = async (newPlaces: any[]) => {
-    markersRef.current.forEach(m => { m.map = null; });
+    markersRef.current.forEach(({ marker }) => { marker.map = null; });
     markersRef.current = [];
 
     if (!window.google || newPlaces.length === 0) return;
@@ -397,13 +458,13 @@ export default function App() {
       });
       
       marker.addListener('click', () => {
-        setActivePlaceId(place.id);
-        map.panTo(place.location);
-        map.setZoom(17);
+        focusPlace(place, { scrollList: true, zoom: 17 });
       });
       
-      markersRef.current.push(marker);
+      markersRef.current.push({ id: place.id, marker, element: pin.element });
     });
+
+    refreshMarkerFocus(activePlaceId);
   };
 
   const performSearch = async (isLoadMore = false) => {
@@ -666,6 +727,37 @@ export default function App() {
     });
   };
 
+  const resetSearchProgress = () => {
+    setHasNextPage(false);
+    setLoadMoreRound(0);
+    setNoChangeRounds(0);
+    setSearchStats({ requests: 0, results: places.length, added: 0, round: 0, noChangeRounds: 0, message: '' });
+  };
+
+  const applyScenario = (scenarioId: ScenarioId) => {
+    const scenario = SCENARIOS.find(item => item.id === scenarioId);
+    if (!scenario) return;
+
+    setActiveScenario(prev => prev === scenarioId ? null : scenarioId);
+    setSearchParams(prev => {
+      if (activeScenario === scenarioId) {
+        return {
+          ...prev,
+          openNow: false,
+          ratingFilter: false,
+          hiddenGem: false,
+          price: 'any',
+          keyword: scenarioId === 'coffee_dessert' ? '' : prev.keyword,
+          type: scenarioId === 'coffee_dessert' ? 'restaurant' : prev.type,
+          radius: scenarioId === 'walkable' || scenarioId === 'coffee_dessert' ? String(DEFAULT_RADIUS_METERS) : prev.radius,
+        };
+      }
+
+      return { ...prev, ...scenario.params };
+    });
+    resetSearchProgress();
+  };
+
   const checkIsOpenNow = (place: any) => {
     if (place.businessStatus === 'CLOSED_PERMANENTLY' || place.businessStatus === 'CLOSED_TEMPORARILY') {
       return false;
@@ -789,8 +881,23 @@ export default function App() {
       alert("請先搜尋，才能抽籤喔！");
       return;
     }
-    const randomIndex = Math.floor(Math.random() * places.length);
-    const w = places[randomIndex];
+
+    const openCandidates = places.filter(place => checkIsOpenNow(place) !== false);
+    const candidates = openCandidates.length >= 3 ? openCandidates : places;
+    const w = getWeightedRandom(candidates, (place) => {
+      const rating = typeof place.rating === 'number' ? place.rating : 3.5;
+      const reviews = typeof place.userRatingCount === 'number' ? place.userRatingCount : 0;
+      const distanceText = distances[place.id] || '';
+      const minutesMatch = distanceText.match(/\d+/);
+      const minutes = minutesMatch ? Number(minutesMatch[0]) : 20;
+      const openBonus = checkIsOpenNow(place) === true ? 18 : 0;
+      const ratingWeight = Math.max((rating - 3) * 18, 6);
+      const reviewWeight = Math.min(Math.log10(reviews + 1) * 8, 24);
+      const distanceWeight = Math.max(30 - minutes, 4);
+      return openBonus + ratingWeight + reviewWeight + distanceWeight;
+    });
+    if (!w) return;
+
     setWinner(w);
     
     // Bring winner to the top
@@ -802,8 +909,7 @@ export default function App() {
     setActivePlaceId(w.id);
     
     if (map) {
-      map.panTo(getLatLng(w.location));
-      map.setZoom(17);
+      focusPlace(w, { scrollList: false, zoom: 17 });
     }
     
     // Scroll list to top
@@ -827,7 +933,7 @@ export default function App() {
       <header className="bg-white dark:bg-gray-800 px-4 h-14 flex items-center justify-between border-b border-gray-200 dark:border-gray-700 shrink-0 z-10 shadow-sm">
         <div className="flex items-center">
           <Compass className="w-6 h-6 text-blue-600 mr-2" />
-          <h1 className="text-lg font-bold text-gray-800 dark:text-gray-100">附近優質店家探測器 V5.1</h1>
+          <h1 className="text-lg font-bold text-gray-800 dark:text-gray-100">附近優質店家探測器 V5.2</h1>
         </div>
         <div className="flex items-center gap-2">
           <button 
@@ -874,7 +980,7 @@ export default function App() {
                   onClick={drawWinner}
                   disabled={places.length === 0}
                   className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                  title="天選之店！"
+                  title="智慧抽選：優先營業中、距離近、評價高的店"
                 >
                   <Dices className="w-5 h-5" />
                 </button>
@@ -900,7 +1006,7 @@ export default function App() {
 
               {winner && (
                 <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-center">
-                  <div className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-2">🎉 天選之店</div>
+                  <div className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-2">🎉 智慧抽選</div>
                   <div className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center justify-center gap-2">
                     {winner.displayName}
                   </div>
@@ -961,6 +1067,29 @@ export default function App() {
                     />
                     <MapPin className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
                   </div>
+                  <div className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    目前以 <span className="font-semibold text-blue-600 dark:text-blue-400">{searchCenterLabel}</span> 為中心
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider">一鍵情境</label>
+                  <div className="flex flex-wrap gap-2">
+                    {SCENARIOS.map(scenario => (
+                      <button
+                        key={scenario.id}
+                        type="button"
+                        onClick={() => applyScenario(scenario.id)}
+                        className={`px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors ${
+                          activeScenario === scenario.id
+                            ? 'bg-blue-600 border-blue-600 text-white'
+                            : 'bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-300'
+                        }`}
+                      >
+                        {scenario.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -969,7 +1098,7 @@ export default function App() {
                     <input 
                       type="text" 
                       value={searchParams.keyword}
-                      onChange={e => setSearchParams({...searchParams, keyword: e.target.value})}
+                      onChange={e => { setActiveScenario(null); setSearchParams({...searchParams, keyword: e.target.value}); }}
                       placeholder="例如：拉麵、甜點、咖啡"
                       className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100"
                     />
@@ -978,7 +1107,7 @@ export default function App() {
                     <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">類型</label>
                     <select 
                       value={searchParams.type}
-                      onChange={e => setSearchParams({...searchParams, type: e.target.value})}
+                      onChange={e => { setActiveScenario(null); setSearchParams({...searchParams, type: e.target.value}); }}
                       className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100"
                     >
                       <option value="restaurant">餐廳美食</option>
@@ -996,7 +1125,7 @@ export default function App() {
                     <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">距離</label>
                     <select 
                       value={searchParams.radius}
-                      onChange={e => setSearchParams({...searchParams, radius: e.target.value})}
+                      onChange={e => { setActiveScenario(null); setSearchParams({...searchParams, radius: e.target.value}); }}
                       className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100"
                     >
                       <option value="1000">1 km 內</option>
@@ -1009,7 +1138,7 @@ export default function App() {
                     <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">價位</label>
                     <select 
                       value={searchParams.price}
-                      onChange={e => setSearchParams({...searchParams, price: e.target.value})}
+                      onChange={e => { setActiveScenario(null); setSearchParams({...searchParams, price: e.target.value}); }}
                       className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100"
                     >
                       <option value="any">不限</option>
@@ -1027,7 +1156,7 @@ export default function App() {
                       <input 
                         type="checkbox" 
                         checked={searchParams.openNow}
-                        onChange={e => setSearchParams({...searchParams, openNow: e.target.checked})}
+                        onChange={e => { setActiveScenario(null); setSearchParams({...searchParams, openNow: e.target.checked}); }}
                         className="peer appearance-none w-5 h-5 border-2 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 checked:bg-blue-500 checked:border-blue-500 transition-colors cursor-pointer"
                       />
                       <Check className="w-3.5 h-3.5 text-white absolute pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity" strokeWidth={3} />
@@ -1039,7 +1168,7 @@ export default function App() {
                       <input 
                         type="checkbox" 
                         checked={searchParams.ratingFilter}
-                        onChange={e => setSearchParams({...searchParams, ratingFilter: e.target.checked})}
+                        onChange={e => { setActiveScenario(null); setSearchParams({...searchParams, ratingFilter: e.target.checked}); }}
                         className="peer appearance-none w-5 h-5 border-2 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 checked:bg-blue-500 checked:border-blue-500 transition-colors cursor-pointer"
                       />
                       <Check className="w-3.5 h-3.5 text-white absolute pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity" strokeWidth={3} />
@@ -1051,7 +1180,7 @@ export default function App() {
                       <input 
                         type="checkbox" 
                         checked={searchParams.hiddenGem}
-                        onChange={e => setSearchParams({...searchParams, hiddenGem: e.target.checked})}
+                        onChange={e => { setActiveScenario(null); setSearchParams({...searchParams, hiddenGem: e.target.checked}); }}
                         className="peer appearance-none w-5 h-5 border-2 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 checked:bg-blue-500 checked:border-blue-500 transition-colors cursor-pointer"
                       />
                       <Check className="w-3.5 h-3.5 text-white absolute pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity" strokeWidth={3} />
@@ -1079,10 +1208,9 @@ export default function App() {
                   return (
                     <div 
                       key={place.id}
+                      ref={el => { placeRefs.current[place.id] = el; }}
                       onClick={() => {
-                        setActivePlaceId(place.id);
-                        map.panTo(place.location);
-                        map.setZoom(17);
+                        focusPlace(place, { scrollList: false, zoom: 17 });
                       }}
                       className={`p-4 cursor-pointer transition-colors hover:bg-blue-50/50 dark:hover:bg-blue-900/10 ${activePlaceId === place.id ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500' : 'border-l-4 border-transparent'}`}
                     >
