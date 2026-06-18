@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Filter, Dices, Copy, Star, DollarSign, MapPinOff, MapPin, Check, Compass, Heart, Navigation, Moon, Sun, Clock, ExternalLink } from 'lucide-react';
+import { Search, Filter, Dices, Copy, Star, MapPinOff, MapPin, Check, Compass, Heart, Navigation, Moon, Sun, Clock, ExternalLink } from 'lucide-react';
 
 declare global {
   interface Window {
@@ -16,6 +16,30 @@ interface SearchParams {
   ratingFilter: boolean;
   hiddenGem: boolean;
 }
+
+const DEFAULT_RADIUS_METERS = 5000;
+const MAX_INITIAL_SEARCH_REQUESTS = 8;
+const MAX_LOAD_MORE_SEARCH_REQUESTS = 6;
+
+const FOOD_RELATED_TYPES = ['restaurant', 'cafe', 'bakery', 'meal_takeaway'];
+const TYPE_EXPANSIONS: Record<string, string[]> = {
+  restaurant: FOOD_RELATED_TYPES,
+  cafe: ['cafe', 'bakery', 'restaurant'],
+  store: ['store', 'supermarket', 'convenience_store'],
+};
+
+const KEYWORD_EXPANSIONS: Record<string, string[]> = {
+  '拉麵': ['ramen', '日式拉麵'],
+  '咖啡': ['coffee', '咖啡廳'],
+  '甜點': ['dessert', '蛋糕', '下午茶'],
+  '早餐': ['breakfast', '早午餐'],
+  '早午餐': ['brunch', '早餐'],
+  '火鍋': ['hot pot', '鍋物'],
+  '壽司': ['sushi', '日本料理'],
+  '燒肉': ['yakiniku', '烤肉'],
+  '義大利麵': ['pasta', '義式餐廳'],
+  '酒吧': ['bar', '餐酒館'],
+};
 
 const DARK_MAP_STYLE = [
   { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
@@ -105,6 +129,75 @@ const getLatLng = (loc: any) => {
   return { lat: Number(latNum), lng: Number(lngNum) };
 };
 
+const getDistanceMeters = (from: any, to: any) => {
+  const { lat: lat1, lng: lon1 } = getLatLng(from);
+  const { lat: lat2, lng: lon2 } = getLatLng(to);
+  const R = 6371e3;
+  const phi1 = lat1 * Math.PI / 180;
+  const phi2 = lat2 * Math.PI / 180;
+  const deltaPhi = (lat2 - lat1) * Math.PI / 180;
+  const deltaLambda = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+    Math.cos(phi1) * Math.cos(phi2) *
+    Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+const getSearchCenters = (center: any, radius: number, isLoadMore: boolean) => {
+  const { lat, lng } = getLatLng(center);
+  const stepMeters = Math.min(Math.max(radius * (isLoadMore ? 0.55 : 0.38), 450), 2500);
+  const latStep = stepMeters / 111320;
+  const lngStep = stepMeters / (111320 * Math.max(Math.cos(lat * Math.PI / 180), 0.2));
+  const centers = [
+    { lat, lng, label: '中心' },
+    { lat: lat + latStep, lng, label: '北側' },
+    { lat: lat - latStep, lng, label: '南側' },
+    { lat, lng: lng + lngStep, label: '東側' },
+    { lat, lng: lng - lngStep, label: '西側' },
+  ];
+
+  if (isLoadMore) {
+    centers.push(
+      { lat: lat + latStep, lng: lng + lngStep, label: '東北側' },
+      { lat: lat + latStep, lng: lng - lngStep, label: '西北側' },
+      { lat: lat - latStep, lng: lng + lngStep, label: '東南側' },
+      { lat: lat - latStep, lng: lng - lngStep, label: '西南側' },
+    );
+  }
+
+  return centers;
+};
+
+const uniqueStrings = (items: string[]) => Array.from(new Set(items.map(item => item.trim()).filter(Boolean)));
+
+const getKeywordVariants = (keyword: string, type: string, isLoadMore: boolean) => {
+  const trimmed = keyword.trim();
+  if (!trimmed) return [];
+
+  const expansions = Object.entries(KEYWORD_EXPANSIONS)
+    .filter(([seed]) => trimmed.includes(seed))
+    .flatMap(([, variants]) => variants);
+  const foodSuffixes = type === 'restaurant' || type === 'cafe' ? [`${trimmed} 餐廳`, `${trimmed} 美食`] : [];
+  const variants = uniqueStrings([trimmed, ...foodSuffixes, ...expansions]);
+  return variants.slice(0, isLoadMore ? 4 : 3);
+};
+
+const getTypeVariants = (type: string, isLoadMore: boolean) => {
+  const variants = TYPE_EXPANSIONS[type] || [type];
+  return variants.slice(0, isLoadMore ? 4 : 3);
+};
+
+const scorePlace = (place: any, center: any) => {
+  const distance = place.location ? getDistanceMeters(center, place.location) : 999999;
+  const rating = typeof place.rating === 'number' ? place.rating : 0;
+  const reviews = typeof place.userRatingCount === 'number' ? place.userRatingCount : 0;
+  const ratingScore = rating * 18;
+  const reviewScore = Math.min(Math.log10(reviews + 1) * 10, 35);
+  const distancePenalty = Math.min(distance / 120, 45);
+  return ratingScore + reviewScore - distancePenalty;
+};
+
 const parsePriceLevel = (level: any): number => {
   if (level == null) return -1;
   if (typeof level === 'number') return level;
@@ -119,14 +212,29 @@ const parsePriceLevel = (level: any): number => {
   return -1;
 };
 
+const normalizePlaceForStorage = (place: any) => ({
+  id: place.id,
+  displayName: place.displayName,
+  location: getLatLng(place.location),
+  rating: place.rating,
+  priceLevel: place.priceLevel,
+  formattedAddress: place.formattedAddress,
+  businessStatus: place.businessStatus,
+  userRatingCount: place.userRatingCount,
+});
+
 export default function App() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [map, setMap] = useState<any>(null);
   const [userLocation, setUserLocation] = useState<any>(null);
   const [places, setPlaces] = useState<any[]>([]);
   const [favorites, setFavorites] = useState<any[]>(() => {
-    const saved = localStorage.getItem('favorites');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('favorites');
+      return saved ? JSON.parse(saved).map(normalizePlaceForStorage) : [];
+    } catch {
+      return [];
+    }
   });
   const [distances, setDistances] = useState<Record<string, string>>({});
   const [darkMode, setDarkMode] = useState(() => {
@@ -136,13 +244,15 @@ export default function App() {
   const [isSearching, setIsSearching] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasNextPage, setHasNextPage] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [searchStats, setSearchStats] = useState({ requests: 0, results: 0 });
   const [searchParams, setSearchParams] = useState<SearchParams>({
     keyword: '',
     type: 'restaurant',
-    radius: 'any',
+    radius: String(DEFAULT_RADIUS_METERS),
     price: 'any',
     openNow: false,
-    ratingFilter: true,
+    ratingFilter: false,
     hiddenGem: false,
   });
   const [winner, setWinner] = useState<any>(null);
@@ -153,6 +263,7 @@ export default function App() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const markersRef = useRef<any[]>([]);
   const userMarkerRef = useRef<any>(null);
+  const searchRunRef = useRef(0);
 
   useEffect(() => {
     localStorage.setItem('favorites', JSON.stringify(favorites));
@@ -292,11 +403,18 @@ export default function App() {
 
   const performSearch = async (isLoadMore = false) => {
     if (!userLocation || !map) return;
+    const searchRunId = ++searchRunRef.current;
     if (isLoadMore) setIsLoadingMore(true);
     else setIsSearching(true);
     
     setWinner(null);
     setViewMode('search');
+    setHasSearched(true);
+    if (!isLoadMore) {
+      setDistances({});
+      setHasNextPage(false);
+      setSearchStats({ requests: 0, results: 0 });
+    }
     
     try {
       const { Place } = await window.google.maps.importLibrary("places");
@@ -313,52 +431,141 @@ export default function App() {
         'userRatingCount'
       ];
 
-      let results = [];
-      let currentHasNextPage = false;
-      
-      if (searchParams.keyword) {
-        let textQuery = searchParams.keyword;
-        if (isLoadMore) {
-          const exclusionQuery = places.map(p => `-"${p.displayName.replace(/"/g, '')}"`).join(' ');
-          textQuery = `${searchParams.keyword} ${exclusionQuery}`;
-        }
+      const radius = parseInt(searchParams.radius);
+      const centers = getSearchCenters(userLocation, radius, isLoadMore);
+      const maxRequests = isLoadMore ? MAX_LOAD_MORE_SEARCH_REQUESTS : MAX_INITIAL_SEARCH_REQUESTS;
+      const tasks: any[] = [];
 
-        const request: any = {
-          fields: baseFields,
-          textQuery: textQuery,
-          maxResultCount: 20,
-        };
-        const radius = searchParams.radius === 'any' ? 50000 : parseInt(searchParams.radius);
-        
-        if (searchParams.hiddenGem) {
-          request.rankPreference = 'DISTANCE';
-          request.locationRestriction = { center: userLocation, radius: searchParams.radius === 'any' ? 5000 : radius };
+      if (searchParams.keyword.trim()) {
+        const keywordVariants = getKeywordVariants(searchParams.keyword, searchParams.type, isLoadMore);
+        if (isLoadMore) {
+          centers.slice(1).forEach(center => {
+            tasks.push({ kind: 'text', query: keywordVariants[0], center });
+          });
+          keywordVariants.slice(1).forEach(query => {
+            tasks.push({ kind: 'text', query, center: centers[0] });
+          });
         } else {
-          request.locationBias = { center: userLocation, radius };
+          keywordVariants.forEach(query => {
+            tasks.push({ kind: 'text', query, center: centers[0] });
+          });
+          centers.slice(1).forEach(center => {
+            tasks.push({ kind: 'text', query: keywordVariants[0], center });
+          });
         }
-        
-        const response = await Place.searchByText(request);
-        results = response.places || [];
-        if (results.length === 20) currentHasNextPage = true;
       } else {
-        const request: any = {
-          fields: baseFields,
-          includedTypes: [searchParams.type],
-          maxResultCount: 20,
-        };
-        const radius = searchParams.radius === 'any' ? 5000 : parseInt(searchParams.radius);
-        request.locationRestriction = { center: userLocation, radius };
-        if (searchParams.hiddenGem) {
-          request.rankPreference = 'DISTANCE';
+        const typeVariants = getTypeVariants(searchParams.type, isLoadMore);
+        if (isLoadMore) {
+          centers.slice(1).forEach(center => {
+            tasks.push({ kind: 'nearby', type: searchParams.type, center });
+          });
+          typeVariants.slice(1).forEach(type => {
+            tasks.push({ kind: 'nearby', type, center: centers[0] });
+          });
+        } else {
+          typeVariants.forEach(type => {
+            tasks.push({ kind: 'nearby', type, center: centers[0] });
+          });
+          centers.slice(1).forEach(center => {
+            tasks.push({ kind: 'nearby', type: searchParams.type, center });
+          });
         }
-        
-        const response = await Place.searchNearby(request);
-        results = response.places || [];
       }
+
+      const selectedTasks = tasks.slice(0, maxRequests);
+      const resultBuckets: any[] = [];
+      let executedSearches = 0;
+      let fullResultResponses = 0;
+
+      for (const task of selectedTasks) {
+        if (searchRunRef.current !== searchRunId) return;
+
+        try {
+          let response: any;
+          if (task.kind === 'text') {
+            const request: any = {
+              fields: baseFields,
+              textQuery: task.query,
+              maxResultCount: 20,
+              locationBias: { center: task.center, radius },
+            };
+            if (searchParams.hiddenGem) {
+              request.rankPreference = 'DISTANCE';
+            }
+            response = await Place.searchByText(request);
+          } else {
+            const request: any = {
+              fields: baseFields,
+              includedTypes: [task.type],
+              maxResultCount: 20,
+              locationRestriction: { center: task.center, radius },
+            };
+            if (searchParams.hiddenGem) {
+              request.rankPreference = 'DISTANCE';
+            }
+            response = await Place.searchNearby(request);
+          }
+
+          executedSearches += 1;
+          const taskPlaces = response.places || [];
+          if (taskPlaces.length === 20) fullResultResponses += 1;
+          taskPlaces.forEach((place: any) => {
+            resultBuckets.push({ place, score: scorePlace(place, userLocation) });
+          });
+        } catch (taskError) {
+          executedSearches += 1;
+          console.warn('A Places search task failed', task, taskError);
+        }
+      }
+
+      const bestById = new Map<string, any>();
+      resultBuckets.forEach(({ place, score }) => {
+        if (!place.id) return;
+        const existing = bestById.get(place.id);
+        if (!existing || score > existing.score) {
+          bestById.set(place.id, { place, score });
+        }
+      });
+
+      const results = Array.from(bestById.values())
+        .sort((a, b) => b.score - a.score)
+        .map(item => item.place);
+      const currentHasNextPage = fullResultResponses > 0 || tasks.length > selectedTasks.length;
+
+      const existingIds = isLoadMore ? new Set(places.map(p => p.id)) : new Set();
+      const uniqueNew = results.filter((p: any) => !existingIds.has(p.id));
+
+      const filtered = uniqueNew.filter((p: any) => {
+        if (p.location && getDistanceMeters(userLocation, p.location) > radius * 1.35) return false;
+        if (searchParams.ratingFilter && p.rating && p.rating < 4.0) return false;
+        if (searchParams.hiddenGem && p.userRatingCount && p.userRatingCount > 1000) return false;
+        if (searchParams.price !== 'any') {
+          const pLevel = parsePriceLevel(p.priceLevel);
+          // Only filter out if we strictly know it exceeds the requested price level.
+          // Keep -1 (unknowns) or matching levels. Avoid eliminating places just because price is unlisted.
+          if (pLevel !== -1 && pLevel > parseInt(searchParams.price)) return false;
+        }
+        if (searchParams.openNow) {
+          // If openNow is checked, only show if we are sure it's open
+          const isOpen = checkIsOpenNow(p);
+          if (isOpen === false || isOpen === null) return false;
+        }
+        return true;
+      });
+
+      const combined = isLoadMore ? [...places, ...filtered] : filtered;
+      if (searchRunRef.current !== searchRunId) return;
+      setPlaces(combined);
+      updateMarkers(combined);
+      setHasNextPage(currentHasNextPage);
+      setSearchStats(prev => ({
+        requests: isLoadMore ? prev.requests + executedSearches : executedSearches,
+        results: combined.length,
+      }));
 
       // Manual distance calculation (straight line estimate to start with)
       const newDistances: Record<string, string> = {};
-      results.forEach((p: any) => {
+      filtered.forEach((p: any) => {
         if (p.location && userLocation) {
           const lat1 = userLocation.lat;
           const lon1 = userLocation.lng;
@@ -384,9 +591,10 @@ export default function App() {
       });
       setDistances(prev => ({ ...prev, ...newDistances }));
 
-      // Fetch accurate walking distances from BRouter asynchronously
+      // Fetch accurate walking distances from BRouter asynchronously.
       const fetchBrouterDistances = async () => {
-        for (const p of results) {
+        for (const p of filtered) {
+          if (searchRunRef.current !== searchRunId) return;
           if (p.location && userLocation) {
             try {
               const lon1 = userLocation.lng.toFixed(6);
@@ -399,6 +607,7 @@ export default function App() {
               const res = await fetch(brouterUrl);
               const data = await res.json();
               
+              if (searchRunRef.current !== searchRunId) return;
               if (data && data.features && data.features[0] && data.features[0].properties) {
                  const seconds = data.features[0].properties['total-time'];
                  if (seconds > 0) {
@@ -409,50 +618,28 @@ export default function App() {
             } catch (e) {
               console.warn("Brouter API failed for", p.id);
             }
-            // Add a small delay between requests to avoid rate limiting
+            // Add a small delay between requests to avoid rate limiting.
             await new Promise(resolve => setTimeout(resolve, 200));
           }
         }
       };
       
-      // Run it in the background
+      // Run it in the background.
       fetchBrouterDistances();
-
-      const existingIds = isLoadMore ? new Set(places.map(p => p.id)) : new Set();
-      const uniqueNew = results.filter((p: any) => !existingIds.has(p.id));
-
-      const filtered = uniqueNew.filter((p: any) => {
-        if (searchParams.ratingFilter && p.rating && p.rating < 4.0) return false;
-        if (searchParams.hiddenGem && p.userRatingCount && p.userRatingCount > 1000) return false;
-        if (searchParams.price !== 'any') {
-          const pLevel = parsePriceLevel(p.priceLevel);
-          // Only filter out if we strictly know it exceeds the requested price level.
-          // Keep -1 (unknowns) or matching levels. Avoid eliminating places just because price is unlisted.
-          if (pLevel !== -1 && pLevel > parseInt(searchParams.price)) return false;
-        }
-        if (searchParams.openNow) {
-          // If openNow is checked, only show if we are sure it's open
-          const isOpen = checkIsOpenNow(p);
-          if (isOpen === false || isOpen === null) return false;
-        }
-        return true;
-      });
-
-      const combined = isLoadMore ? [...places, ...filtered] : filtered;
-      setPlaces(combined);
-      updateMarkers(combined);
-      setHasNextPage(currentHasNextPage);
       
       if (!isLoadMore && window.innerWidth < 768) {
         setShowFilters(false);
       }
 
     } catch (error) {
+      if (searchRunRef.current !== searchRunId) return;
       console.error("Search failed", error);
       alert("搜尋失敗，請稍後再試");
     } finally {
-      if (isLoadMore) setIsLoadingMore(false);
-      else setIsSearching(false);
+      if (searchRunRef.current === searchRunId) {
+        if (isLoadMore) setIsLoadingMore(false);
+        else setIsSearching(false);
+      }
     }
   };
 
@@ -462,7 +649,7 @@ export default function App() {
       if (isFav) {
         return prev.filter(f => f.id !== place.id);
       } else {
-        return [...prev, place];
+        return [...prev, normalizePlaceForStorage(place)];
       }
     });
   };
@@ -681,6 +868,13 @@ export default function App() {
                 </button>
               </div>
 
+              {hasSearched && viewMode === 'search' && (
+                <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                  <span>{isSearching ? '正在擴大掃描附近店家...' : `已掃描 ${searchStats.requests} 次，整理出 ${searchStats.results} 間`}</span>
+                  <span className="text-gray-400 dark:text-gray-500">深度搜尋</span>
+                </div>
+              )}
+
               {winner && (
                 <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-center">
                   <div className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-2">🎉 天選之店</div>
@@ -734,12 +928,12 @@ export default function App() {
             <div className={`flex-col shrink-0 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 transition-all duration-300 overflow-y-auto max-h-[60vh] md:max-h-none ${showFilters ? 'flex' : 'hidden md:flex'}`}>
               <div className="p-4 space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">搜尋地點</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">搜尋中心</label>
                   <div className="relative">
                     <input 
                       ref={searchInputRef}
                       type="text" 
-                      placeholder="輸入地址、地標或區域" 
+                      placeholder="輸入目前位置、地址或商圈"
                       className="w-full pl-9 pr-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow dark:text-gray-100"
                     />
                     <MapPin className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
@@ -748,12 +942,12 @@ export default function App() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">關鍵字</label>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">想找什麼</label>
                     <input 
                       type="text" 
                       value={searchParams.keyword}
                       onChange={e => setSearchParams({...searchParams, keyword: e.target.value})}
-                      placeholder="例如: 拉麵" 
+                      placeholder="例如：拉麵、甜點、咖啡"
                       className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100"
                     />
                   </div>
@@ -782,10 +976,10 @@ export default function App() {
                       onChange={e => setSearchParams({...searchParams, radius: e.target.value})}
                       className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100"
                     >
-                      <option value="any">不限</option>
                       <option value="1000">1 km 內</option>
                       <option value="3000">3 km 內</option>
                       <option value="5000">5 km 內</option>
+                      <option value="10000">10 km 內</option>
                     </select>
                   </div>
                   <div>
@@ -850,8 +1044,8 @@ export default function App() {
             {(viewMode === 'search' ? places : favorites).length === 0 && !isSearching ? (
               <div className="flex flex-col items-center justify-center h-full p-8 text-center text-gray-400 dark:text-gray-600">
                 {viewMode === 'search' ? <MapPinOff className="w-12 h-12 mb-3 opacity-50" /> : <Heart className="w-12 h-12 mb-3 opacity-50" />}
-                <p className="text-sm font-medium">{viewMode === 'search' ? '開始探索附近的店家吧！' : '還沒有收藏任何店家喔'}</p>
-                <p className="text-xs mt-1 opacity-70">{viewMode === 'search' ? '輸入地點或調整篩選條件' : '在搜尋結果中點擊愛心來收藏'}</p>
+                <p className="text-sm font-medium">{viewMode === 'search' ? (hasSearched ? '沒有找到符合條件的店家' : '開始探索附近的店家吧！') : '還沒有收藏任何店家喔'}</p>
+                <p className="text-xs mt-1 opacity-70">{viewMode === 'search' ? (hasSearched ? '可以放寬距離、價位或關閉篩選再試一次' : '設定地點和關鍵字後開始搜尋') : '在搜尋結果中點擊愛心來收藏'}</p>
               </div>
             ) : (
               <div className="divide-y divide-gray-100 dark:divide-gray-800">
